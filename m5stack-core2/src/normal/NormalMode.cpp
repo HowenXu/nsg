@@ -40,7 +40,7 @@ void NormalMode::loop() {
     while (xQueueReceive(scanner->scanResultQueue, &scanned, (TickType_t)0)) {
         // search for connected, if it is advertising, then it's disconnected
         // we need to (re)initialize the BLE client
-        // TODO: how do we know the max number of BLE connection?
+        // TODO: how do we know the max number of BLE connection? use CONFIG_BTDM_CTRL_BLE_MAX_CONN
         for (auto& item : connectedCameras) {
             if (item.info.bleName == scanned.name && item.info.device == scanned.device) {
                 if (item.pClient && !item.pClient->isConnected()) {
