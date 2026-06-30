@@ -123,9 +123,8 @@ void NormalMode::updateTimeMessageWithRTC(TimeMessage& message) {
     message.hour = datetime.time.hours;
     message.minute = datetime.time.minutes;
     message.second = datetime.time.seconds;
-    // TODO: hardcoded timezone to UTC+8, maybe using build arg and default to 8?
     message.dstOffset = 0;
-    message.tzOffsetHours = 8;
+    message.tzOffsetHours = Config::getTzOffsetHours();
     message.tzOffsetMinutes = 0;
 }
 

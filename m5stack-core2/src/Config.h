@@ -1,8 +1,9 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-#include <stdint.h>
 #include <ArduinoJson.h>
+#include <stdint.h>
+
 #include <string>
 #include <vector>
 
@@ -36,6 +37,10 @@ void addToSavedCameras(const SavedCameraInfo& cameraInfo);
  * enabled (i.e. after BLEDevice::init()).
  */
 void reconcileSavedCamerasWithBondList();
+
+void setTzOffsetHours(const int8_t value);
+
+int8_t getTzOffsetHours();
 
 }  // namespace Config
 

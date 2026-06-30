@@ -142,10 +142,11 @@ void Config::reconcileSavedCamerasWithBondList() {
         }
         // Parse "xx:xx:xx:xx:xx:xx" into esp_bd_addr_t
         esp_bd_addr_t addr;
-        if (sscanf(it->btAddr.c_str(), "%02hhx:%02hhx:%02hhx:%02hhx:%02hhx:%02hhx",
-                   &addr[0], &addr[1], &addr[2], &addr[3], &addr[4], &addr[5]) != ESP_BD_ADDR_LEN) {
-            NSG_LOG_WARN("Config::reconcileSavedCamerasWithBondList", "Malformed btAddr '%s' for %s, keeping",
-                         it->btAddr.c_str(), it->bleName.c_str());
+        auto scannedLen =
+            sscanf(it->btAddr.c_str(), "%02hhx:%02hhx:%02hhx:%02hhx:%02hhx:%02hhx", &addr[0], &addr[1], &addr[2], &addr[3], &addr[4], &addr[5]);
+        if (scannedLen != ESP_BD_ADDR_LEN) {
+            NSG_LOG_WARN("Config::reconcileSavedCamerasWithBondList", "Malformed btAddr '%s' for %s, keeping", it->btAddr.c_str(),
+                         it->bleName.c_str());
             ++it;
             continue;
         }
@@ -158,8 +159,7 @@ void Config::reconcileSavedCamerasWithBondList() {
             }
         }
         if (!found) {
-            NSG_LOG_INFO("Config::reconcileSavedCamerasWithBondList",
-                         "Removing orphaned camera %s (bond evicted)", it->bleName.c_str());
+            NSG_LOG_INFO("Config::reconcileSavedCamerasWithBondList", "Removing orphaned camera %s (bond evicted)", it->bleName.c_str());
             it = cameras.erase(it);
             changed = true;
         } else {
@@ -186,4 +186,27 @@ void Config::reconcileSavedCamerasWithBondList() {
     }
     nvs.putString("savedCameras", json.c_str());
     nvs.end();
+}
+
+void Config::setTzOffsetHours(const int8_t value) {
+    Preferences nvs;
+    if (!nvs.begin("nsg", false)) {
+        NSG_LOG_FATAL("Config::setTzOffsetHours", "Failed to open NVS");
+    }
+
+    if (!nvs.putChar("tzOffsetHours", value)) {
+        NSG_LOG_FATAL("Config::setTzOffsetHours", "Failed to save tzOffsetHours to NVS");
+    }
+    nvs.end();
+}
+
+int8_t Config::getTzOffsetHours() {
+    Preferences nvs;
+    if (!nvs.begin("nsg", false)) {
+        NSG_LOG_FATAL("Config::setTzOffsetHours", "Failed to open NVS");
+    }
+    // default to UTC+8
+    auto result = nvs.getChar("tzOffsetHours", 8);
+    nvs.end();
+    return result;
 }
