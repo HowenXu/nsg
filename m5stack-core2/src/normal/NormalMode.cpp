@@ -16,13 +16,16 @@ NormalMode::~NormalMode() {
 }
 
 void NormalMode::setup() {
+    BootMode::initBLE(rnd);
+    Config::reconcileSavedCamerasWithBondList();
+
     auto savedCameras = Config::getSavedCameras();
     connectedCameras.reserve(savedCameras.size());
     for (const auto& saved : savedCameras) {
+        NSG_LOG_INFO("NormalMode::setup", "Loadding saved camera %s", saved.bleName);
         connectedCameras.emplace_back(saved);
     }
 
-    BootMode::initBLE(rnd);
     scanner.reset(new PairedScanner());
     if (!scanner->startScanning()) {
         NSG_LOG_FATAL("NormalSetup", "failed to start BLE scanning");
@@ -40,7 +43,6 @@ void NormalMode::loop() {
     while (xQueueReceive(scanner->scanResultQueue, &scanned, (TickType_t)0)) {
         // search for connected, if it is advertising, then it's disconnected
         // we need to (re)initialize the BLE client
-        // TODO: how do we know the max number of BLE connection? use CONFIG_BTDM_CTRL_BLE_MAX_CONN
         for (auto& item : connectedCameras) {
             if (item.info.bleName == scanned.name && item.info.device == scanned.device) {
                 if (item.pClient && !item.pClient->isConnected()) {
@@ -49,6 +51,11 @@ void NormalMode::loop() {
                     item.pClient.reset();
                 }
                 if (!item.pClient) {
+                    if (countActiveBLEConnections() >= CONFIG_BTDM_CTRL_BLE_MAX_CONN) {
+                        NSG_LOG_WARN("NormalLoop", "Max BLE connections (%d) reached, skipping %s",
+                                     CONFIG_BTDM_CTRL_BLE_MAX_CONN, item.info.bleName.c_str());
+                        continue;
+                    }
                     item.pClient.reset(new NikonBLEClient(rnd, item.info.device, item.info.nonce));
                     if (!scanStopped) {
                         // stop scanning to free up the attenna
@@ -127,4 +134,14 @@ GeoMessage NormalMode::generateGeoMessage(double lat, double lon, int32_t altitu
     auto datetime = M5.Rtc.getDateTime();
     return GeoMessage::fromDecimal(lat, lon, altitude, satellites, datetime.date.year, datetime.date.month, datetime.date.date, datetime.time.hours,
                                    datetime.time.minutes, datetime.time.seconds, 0, valid);
+}
+
+int NormalMode::countActiveBLEConnections() const {
+    int count = 0;
+    for (const auto& item : connectedCameras) {
+        if (item.pClient && item.pClient->isConnected()) {
+            count++;
+        }
+    }
+    return count;
 }

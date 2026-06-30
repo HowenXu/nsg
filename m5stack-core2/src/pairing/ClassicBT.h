@@ -17,6 +17,9 @@ class ClassicBT {
     // return true -> pair confirmed,
     // return false -> pair failed.
     bool confirmPairCode(bool accept);
+    // return the classic BT address of the paired device.
+    // Only valid after a successful searchAndInitiatePair().
+    const uint8_t* getClassicAddr() const;
 
    private:
     BluetoothSerial serialBT;
@@ -26,6 +29,8 @@ class ClassicBT {
     std::atomic_bool pairCodeReady = false;
     std::atomic_bool authDone = false;
     std::atomic_bool authSuccess = false;
+    // classic BT address of the paired device, filled by searchAndInitiatePair()
+    uint8_t classicAddr[ESP_BD_ADDR_LEN] = {0};
 };
 
 #endif

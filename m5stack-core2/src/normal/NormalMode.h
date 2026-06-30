@@ -23,6 +23,7 @@ class NormalMode : public BootMode {
     std::vector<ConnectedCamera> connectedCameras;
     void updateTimeMessageWithRTC(TimeMessage& message);
     GeoMessage generateGeoMessage(double lat, double lon, int32_t altitude, uint8_t satellites, uint8_t valid);
+    int countActiveBLEConnections() const;
 };
 
 #endif  // NORMAL_MODE_H

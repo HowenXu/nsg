@@ -107,6 +107,7 @@ void PairingMode::runPairingFlow() {
     const uint32_t code = classicBT->getPairCode();
     NSG_LOG_INFO("PairingMode::runPairingFlow", "Pair code: %06u", code);
     // TODO: show code on screen and let user confirm.
+    // TODO: also vibration and speaker beep?
     if (!classicBT->confirmPairCode(true)) {
         NSG_LOG_ERROR("PairingMode::runPairingFlow", "failed to confirm pair code");
         return;
@@ -114,6 +115,12 @@ void PairingMode::runPairingFlow() {
     NSG_LOG_INFO("PairingMode::runPairingFlow", "Classic BT bond established");
 
     NSG_LOG_INFO("PairingMode::runPairingFlow", "Saving paired camera info...");
-    SavedCameraInfo cameraInfo(String(cameraName.c_str()), pClient->getDevice(), pClient->getNonce());
+    // Format classic BT address as "xx:xx:xx:xx:xx:xx" (matches BLEAddress::toString format)
+    const uint8_t* addr = classicBT->getClassicAddr();
+    char btAddrStr[18];
+    snprintf(btAddrStr, sizeof(btAddrStr), "%02x:%02x:%02x:%02x:%02x:%02x",
+             addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]);
+    SavedCameraInfo cameraInfo(String(cameraName.c_str()), pClient->getDevice(), pClient->getNonce(), String(btAddrStr));
     Config::addToSavedCameras(cameraInfo);
+    Config::reconcileSavedCamerasWithBondList();
 }

@@ -68,8 +68,6 @@ ClassicBT::~ClassicBT() { serialBT.end(); }
 bool ClassicBT::searchAndInitiatePair(uint32_t searchTimeoutMs) {
     NSG_LOG_INFO("ClassicBT::searchAndInitiatePair", "Scanning classic BT...");
     bool deviceFound = false;
-    // the native BT addr for target device
-    uint8_t classicAddr[ESP_BD_ADDR_LEN];
     uint32_t scanStartTime = millis();
     while (!deviceFound && millis() - scanStartTime < searchTimeoutMs) {
         // scan for 10s
@@ -141,4 +139,8 @@ bool ClassicBT::confirmPairCode(bool accept) {
     }
 
     return authSuccess;
+}
+
+const uint8_t* ClassicBT::getClassicAddr() const {
+    return classicAddr;
 }
