@@ -5,7 +5,7 @@
 #include "ConnectedCamera.h"
 #include "Esp32RandomGenerator.h"
 #include "GeoMessage.h"
-#include "PairedScanner.h"
+#include "../common/NikonBLEScanner.h"
 #include "TimeMessage.h"
 #include <memory>
 
@@ -19,7 +19,7 @@ class NormalMode : public BootMode {
 
    private:
     Esp32RandomGenerator rnd;
-    std::unique_ptr<PairedScanner> scanner;
+    std::unique_ptr<NikonBLEScanner> scanner;
     std::vector<ConnectedCamera> connectedCameras;
     void updateTimeMessageWithRTC(TimeMessage& message);
     GeoMessage generateGeoMessage(double lat, double lon, int32_t altitude, uint8_t satellites, uint8_t valid);

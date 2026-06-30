@@ -5,7 +5,7 @@
 #include "../common/NikonBLEClient.h"
 #include "Config.h"
 #include "Logging.h"
-#include "PairedScanner.h"
+#include "../common/NikonBLEScanner.h"
 
 NormalMode::NormalMode() : connectedCameras() {}
 
@@ -25,7 +25,7 @@ void NormalMode::setup() {
         connectedCameras.emplace_back(saved);
     }
 
-    scanner.reset(new PairedScanner());
+    scanner.reset(new NikonBLEScanner(NikonBLEScannerMode::PAIRED));
     if (!scanner->startScanning()) {
         NSG_LOG_FATAL("NormalSetup", "failed to start BLE scanning");
     }

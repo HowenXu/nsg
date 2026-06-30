@@ -18,8 +18,10 @@ PairingMode::~PairingMode() {
 }
 
 void PairingMode::setup() {
-    scanner.reset(new PairingScanner());
-    scanner->startScanning();
+    scanner.reset(new NikonBLEScanner(NikonBLEScannerMode::NEW_DEVICE));
+    if (!scanner->startScanning()) {
+        NSG_LOG_FATAL("PairingMode::setup", "failed to start BLE scanning");
+    }
 }
 
 void PairingMode::loop() {

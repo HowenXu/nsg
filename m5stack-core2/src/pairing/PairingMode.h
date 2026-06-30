@@ -7,7 +7,7 @@
 #include "BootMode.h"
 #include "ClassicBT.h"
 #include "Esp32RandomGenerator.h"
-#include "PairingScanner.h"
+#include "../common/NikonBLEScanner.h"
 #include "../common/NikonBLEClient.h"
 #include "../common/ScannedCamera.h"
 
@@ -28,7 +28,7 @@ class PairingMode : public BootMode {
 
     State state;
     Esp32RandomGenerator rnd;
-    std::unique_ptr<PairingScanner> scanner;
+    std::unique_ptr<NikonBLEScanner> scanner;
     std::unique_ptr<NikonBLEClient> pClient;
     std::unique_ptr<ClassicBT> classicBT;
     std::vector<ScannedCamera> cameraList;
