@@ -134,7 +134,7 @@ bool ClassicBT::confirmPairCode(bool accept) {
 
     if (authSuccess) {
         // give camera sometime to make the connection
-        delay(10000);
+        delay(6000);
         NSG_LOG_INFO("ClassicBT::confirmPairCode", "Classic BT bond established");
     }
 

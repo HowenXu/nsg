@@ -16,7 +16,6 @@ NormalMode::~NormalMode() {
 }
 
 void NormalMode::setup() {
-    BootMode::initBLE(rnd);
     Config::reconcileSavedCamerasWithBondList();
 
     auto savedCameras = Config::getSavedCameras();

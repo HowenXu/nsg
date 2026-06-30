@@ -4,7 +4,9 @@
 
 #include "BootMode.h"
 #include "Config.h"
+#include "Esp32RandomGenerator.h"
 #include "Logging.h"
+#include "Utils.h"
 #include "normal/NormalMode.h"
 #include "pairing/PairingMode.h"
 
@@ -17,7 +19,7 @@ void drawCentered(const String& text, int y, int textSize = 2, uint32_t color = 
 
 BootModeEnum detectBootMode() {
     const unsigned long WAIT_MS = 5000;
-    const unsigned long THRESHOLD_MS = 2500;
+    const unsigned long THRESHOLD_MS = 1000;
     const unsigned long REFRESH_MS = 30;
 
     unsigned long startMs = millis();
@@ -25,29 +27,32 @@ BootModeEnum detectBootMode() {
 
     // draw text
     M5.Display.fillScreen(TFT_BLACK);
-    drawCentered("Press screen for 3s", M5.Display.height() / 2 - 45, 2);
-    drawCentered("to enter", M5.Display.height() / 2 - 20, 2);
-    drawCentered("Pairing Mode", M5.Display.height() / 2 + 5, 3, TFT_YELLOW);
+    drawCentered("Holding Button C to", M5.Display.height() / 2 - 45, 2);
+    drawCentered("Pair new device", M5.Display.height() / 2 - 5, 3, TFT_YELLOW);
 
     while (millis() - startMs < WAIT_MS) {
         M5.update();
 
-        // any touch will be considered valid
-        if (M5.Touch.getCount() > 0) {
+        // check BtnC pressed and give vib feedback
+        if (M5.BtnC.isPressed()) {
+            M5.Power.setVibration(128);
             touched += REFRESH_MS;
             if (touched >= THRESHOLD_MS) break;
         } else {
+            M5.Power.setVibration(0);
             touched = 0;
         }
 
         // show counter
-        int remaining = (WAIT_MS - (millis() - startMs) + 999) / 1000;
+        int remaining = (WAIT_MS - (millis() - startMs)) / 1000;
         // This will cause flickering
         // M5.Display.fillRect(0, M5.Display.height() / 2 + 30, M5.Display.width(), 40, TFT_BLACK);
         drawCentered(String("Auto normal in ") + remaining + "s", M5.Display.height() / 2 + 50, 2, TFT_LIGHTGREY);
 
         delay(REFRESH_MS);
     }
+    // reset vib
+    M5.Power.setVibration(0);
 
     // show result
     M5.Display.fillScreen(TFT_BLACK);
@@ -75,11 +80,20 @@ void setup() {
     NSG_LOG_DEBUG("MainSetup", "M5 initialized");
 
     if (!M5.Rtc.isEnabled()) {
-        NSG_LOG_FATAL("MainSetup", "RTC not found, waiting...");
+        NSG_LOG_FATAL("MainSetup", "RTC not found");
     }
 
     if (!M5.Rtc.begin()) {
-        NSG_LOG_ERROR("MainSetup", "failed to initialize RTC");
+        NSG_LOG_FATAL("MainSetup", "failed to initialize RTC");
+    }
+
+    // init BLE stack (required by both boot modes)
+    Esp32RandomGenerator rnd;
+    const uint32_t id = Config::getOrGenerateId(rnd);
+    const std::string bleDeviceName = Utils::generateFullId(id);
+    NSG_LOG_INFO("MainSetup", "BLE device name: %s", bleDeviceName.c_str());
+    if (!BLEDevice::init(String(bleDeviceName.c_str()))) {
+        NSG_LOG_FATAL("MainSetup", "failed to initialize BLE");
     }
 
     // collect boot up mode

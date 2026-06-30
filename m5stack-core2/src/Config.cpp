@@ -78,10 +78,6 @@ std::vector<SavedCameraInfo> Config::getSavedCameras() {
 void Config::addToSavedCameras(const SavedCameraInfo& cameraInfo) {
     std::vector<SavedCameraInfo> cameras = getSavedCameras();
 
-    // TODO: use CONFIG_BT_SMP_MAX_BONDS for max bonded device
-    //       also, instead update old one, we should remove old and insert new
-    //       or call some method to check the bond? but need to save classic bt addr
-
     // loop through existing cameras list and find item with the same name
     // if so, replace the existing item
     bool found = false;

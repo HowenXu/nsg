@@ -18,8 +18,6 @@ PairingMode::~PairingMode() {
 }
 
 void PairingMode::setup() {
-    BootMode::initBLE(rnd);
-
     scanner.reset(new PairingScanner());
     scanner->startScanning();
 }
