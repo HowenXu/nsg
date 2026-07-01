@@ -32,7 +32,7 @@ void NormalMode::setup() {
 
     // TODO: check RTC, if year < 2026, force waiting for GPS fix to update time
 
-    // TODO: currently do not need screen
+    // TODO: currently do not need screen, add timeout for backlight?
     M5.Display.setBrightness(0);
 }
 

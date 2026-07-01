@@ -25,29 +25,40 @@ void PairingMode::setup() {
 }
 
 void PairingMode::loop() {
-    // TODO: Pairing mode should be 1 time use, so:
-    //       1. search and show on screen, waiting for user to select
-    //       2. after select perform BLE handshake
-    //       3. after BLE handshake, search and perform classic BT
-    //       4. show pairing code and wait for user to confirm
-    //       5. if success, save to NVS and reboot, 
-    //          otherwise stuck with error message on screen, user need to manually reset (or connect monitor to see the fatal message)
+    // Scanning: show scan results on screen and wait user to select
+    // BLE_HANDSHAKE: after user select, do BLE handshake
+    // PAIRING: after BLE handshake success, do classic BT pairing
+    // SHOW_CODE: show code on screen and wait user to confirm
+    // CODE_CONFIRM: user confirmed code, wait pairing result
+    // SUCCESS: after pairing success, save camera info and reboot
+    // FAIL: if any of the stage failed, jump to here and loop, user need to manually reset
     switch (state) {
         case State::SCANNING:
             handleScanResults();
             selectFirstCamera();
             break;
-
-        case State::PAIRING:
-            runPairingFlow();
+        case State::BLE_HANDSHAKE:
+            doBLEHandshake();
             break;
-
-        case State::DONE:
-            // Clean up before reboot.
-            classicBT.reset();
-            pClient.reset();
-            NSG_LOG_INFO("PairingMode::loop", "rebooting...");
-            ESP.restart();
+        case State::PAIRING:
+            startPairingFlow();
+            break;
+        case State::SHOW_CODE:
+            showCodeAndWaitConfirm();
+            break;
+        case State::CODE_CONFIRM:
+            waitPairingResult();
+            break;
+        case State::SUCCESS:
+            saveAndReboot();
+            break;
+        case State::FAIL:
+            // release resouces
+            if (classicBT) classicBT.reset();
+            if (pClient) pClient.reset();
+            if (scanner) scanner.reset();
+            // TODO: show message on screen?
+            delay(50);
             break;
     }
 }
@@ -66,9 +77,11 @@ void PairingMode::handleScanResults() {
         }
         if (!dup) {
             cameraList.push_back(camera);
-            NSG_LOG_INFO("BLEScanCallback", "Found %s, addr=%s", deviceName.c_str(), deviceAddr.toString().c_str());
+            NSG_LOG_INFO("PairingMode::handleScanResults", "Found %s, addr=%s", deviceName.c_str(), deviceAddr.toString().c_str());
         }
     }
+    // prevent empty spin
+    delay(20);
 }
 
 void PairingMode::selectFirstCamera() {
@@ -77,50 +90,97 @@ void PairingMode::selectFirstCamera() {
     if (!cameraList.empty()) {
         scanner->stopScanning();
         selectedCameraIdx = 0;
-        state = State::PAIRING;
+        state = State::BLE_HANDSHAKE;
         NSG_LOG_INFO("PairingMode::selectFirstCamera", "Pairing with %s", cameraList[selectedCameraIdx].name);
     }
 }
 
-void PairingMode::runPairingFlow() {
-    state = State::DONE;
-
+void PairingMode::doBLEHandshake() {
     const ScannedCamera& camera = cameraList[selectedCameraIdx];
-    const std::string cameraName(camera.name);
     const BLEAddress cameraAddr(const_cast<uint8_t*>(camera.addr), camera.addrType);
 
     // Perform BLE handshake.
     pClient.reset(new NikonBLEClient(rnd));
     if (!pClient->doHandshake(cameraAddr, camera.addrType)) {
-        NSG_LOG_FATAL("PairingMode::runPairingFlow", "failed to perform handshake");
+        state = State::FAIL;
+        NSG_LOG_ERROR("PairingMode::doBLEHandshake", "BLE Handshake failed");
+    } else {
+        state = State::PAIRING;
+        NSG_LOG_INFO("PairingMode::doBLEHandshake", "BLE Handshake success");
     }
-    NSG_LOG_INFO("PairingMode::runPairingFlow", "Disconnecting BLE connection");
+    NSG_LOG_INFO("PairingMode::doBLEHandshake", "Disconnecting BLE connection");
     pClient->disconnect();
+}
+
+void PairingMode::startPairingFlow() {
+    const ScannedCamera& camera = cameraList[selectedCameraIdx];
+    const std::string cameraName(camera.name);
 
     // Start Classic Bluetooth pairing.
     classicBT.reset(new ClassicBT(cameraName));
     // TODO: hardcoded to search for 1 minute.
     if (!classicBT->searchAndInitiatePair(60000)) {
-        NSG_LOG_FATAL("PairingMode::runPairingFlow", "failed to search and initiate pair");
+        state = State::FAIL;
+        NSG_LOG_ERROR("PairingMode::startPairingFlow", "Failed to search and initiate pairing");
+    } else {
+        state = State::SHOW_CODE;
+        NSG_LOG_INFO("PairingMode::startPairingFlow", "Initiated pairing");
     }
+}
 
+void PairingMode::showCodeAndWaitConfirm() {
     const uint32_t code = classicBT->getPairCode();
-    NSG_LOG_INFO("PairingMode::runPairingFlow", "Pair code: %06u", code);
+    NSG_LOG_INFO("PairingMode::showCodeAndWaitConfirm", "Pair code: %06u", code);
     // TODO: show code on screen and let user confirm.
     // TODO: also vibration and speaker beep?
-    if (!classicBT->confirmPairCode(true)) {
-        NSG_LOG_ERROR("PairingMode::runPairingFlow", "failed to confirm pair code");
+    // TODO: if user reject the code, jump to fail
+    classicBT->confirmPairCode(true);
+    timeAfterPairSuccess = 0;
+    state = State::CODE_CONFIRM;
+}
+
+void PairingMode::waitPairingResult() {
+    if (!classicBT->isPairingDone(120000)) {
+        // pairing not done/timeout, keep waiting
+        delay(50);
         return;
     }
-    NSG_LOG_INFO("PairingMode::runPairingFlow", "Classic BT bond established");
+    // pair done, or timeout
+    if (classicBT->isPairingSuccess()) {  // pairing success
+        if (timeAfterPairSuccess == 0) {
+            // set time and start waiting
+            timeAfterPairSuccess = millis();
+            NSG_LOG_INFO("PairingMode::waitPairingResult", "Waiting 6s for camera to make connection...");
+        }
+        // wait 6s to give camera sometime to make the connection
+        if (millis() - timeAfterPairSuccess < 6000) {
+            delay(50);
+            return;  // keep waiting
+        } else {
+            NSG_LOG_INFO("PairingMode::waitPairingResult", "Classic BT bond established");
+            state = State::SUCCESS;
+        }
+    } else {  // pairing not success
+        state = State::FAIL;
+        NSG_LOG_ERROR("PairingMode::waitPairingResult", "Pairing failed");
+    }
+}
 
-    NSG_LOG_INFO("PairingMode::runPairingFlow", "Saving paired camera info...");
+void PairingMode::saveAndReboot() {
+    const ScannedCamera& camera = cameraList[selectedCameraIdx];
+    NSG_LOG_INFO("PairingMode::saveAndReboot", "Saving paired camera info...");
     // Format classic BT address as "xx:xx:xx:xx:xx:xx" (matches BLEAddress::toString format)
     const uint8_t* addr = classicBT->getClassicAddr();
     char btAddrStr[18];
-    snprintf(btAddrStr, sizeof(btAddrStr), "%02x:%02x:%02x:%02x:%02x:%02x",
-             addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]);
-    SavedCameraInfo cameraInfo(String(cameraName.c_str()), pClient->getDevice(), pClient->getNonce(), String(btAddrStr));
+    snprintf(btAddrStr, sizeof(btAddrStr), "%02x:%02x:%02x:%02x:%02x:%02x", addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]);
+    SavedCameraInfo cameraInfo(String(camera.name), pClient->getDevice(), pClient->getNonce(), String(btAddrStr));
     Config::addToSavedCameras(cameraInfo);
     Config::reconcileSavedCamerasWithBondList();
+
+    // Clean up before reboot.
+    classicBT.reset();
+    pClient.reset();
+    scanner.reset();
+    NSG_LOG_INFO("PairingMode::saveAndReboot", "rebooting...");
+    ESP.restart();
 }

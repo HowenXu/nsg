@@ -118,6 +118,7 @@ void setup() {
 }
 
 void loop() {
+    M5.update();
     switch (bootModeType) {
         case BootModeEnum::NORMAL:
             if (normalMode) {

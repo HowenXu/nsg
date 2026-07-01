@@ -4,12 +4,12 @@
 #include <memory>
 #include <vector>
 
+#include "../common/NikonBLEClient.h"
+#include "../common/NikonBLEScanner.h"
+#include "../common/ScannedCamera.h"
 #include "BootMode.h"
 #include "ClassicBT.h"
 #include "Esp32RandomGenerator.h"
-#include "../common/NikonBLEScanner.h"
-#include "../common/NikonBLEClient.h"
-#include "../common/ScannedCamera.h"
 
 class PairingMode : public BootMode {
    public:
@@ -20,11 +20,7 @@ class PairingMode : public BootMode {
     void loop() override;
 
    private:
-    enum class State {
-        SCANNING,
-        PAIRING,
-        DONE
-    };
+    enum class State { SCANNING, BLE_HANDSHAKE, PAIRING, SHOW_CODE, CODE_CONFIRM, SUCCESS, FAIL };
 
     State state;
     Esp32RandomGenerator rnd;
@@ -34,9 +30,15 @@ class PairingMode : public BootMode {
     std::vector<ScannedCamera> cameraList;
     size_t selectedCameraIdx;
 
+    uint32_t timeAfterPairSuccess = 0;
+
     void handleScanResults();
     void selectFirstCamera();
-    void runPairingFlow();
+    void doBLEHandshake();
+    void startPairingFlow();
+    void showCodeAndWaitConfirm();
+    void waitPairingResult();
+    void saveAndReboot();
 };
 
 #endif  // PAIRING_MODE_H

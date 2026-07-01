@@ -14,9 +14,10 @@ class ClassicBT {
     // return false -> failed
     bool searchAndInitiatePair(uint32_t searchTimeoutMs);
     uint32_t getPairCode();
-    // return true -> pair confirmed,
-    // return false -> pair failed.
-    bool confirmPairCode(bool accept);
+    // only send the confirm reply
+    void confirmPairCode(bool accept);
+    bool isPairingDone(const uint32_t timeoutMs);
+    bool isPairingSuccess();
     // return the classic BT address of the paired device.
     // Only valid after a successful searchAndInitiatePair().
     const uint8_t* getClassicAddr() const;
@@ -29,6 +30,9 @@ class ClassicBT {
     std::atomic_bool pairCodeReady = false;
     std::atomic_bool authDone = false;
     std::atomic_bool authSuccess = false;
+    // pairing timer, set after send confirm replay
+    // used to calculate isPairingTimeout
+    uint32_t authStart = 0;
     // classic BT address of the paired device, filled by searchAndInitiatePair()
     uint8_t classicAddr[ESP_BD_ADDR_LEN] = {0};
 };

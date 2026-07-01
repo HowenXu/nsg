@@ -49,8 +49,9 @@ ClassicBT::ClassicBT(std::string name) : serialBT(), targetName(name), pairCode(
         pairCodeReady = true;
     });
     serialBT.onAuthComplete([this](boolean success) {
-        authDone = true;
+        // first mark auth success, then mark auth done
         authSuccess = success;
+        authDone = true;
         if (success) {
             NSG_LOG_INFO("ClassicBT::onAuthComplete", "pairing success");
         } else {
@@ -76,9 +77,7 @@ bool ClassicBT::searchAndInitiatePair(uint32_t searchTimeoutMs) {
             auto device = pResults->getDevice(i);
             if (!device->haveName()) continue;
             if (targetName == device->getName()) {
-                NSG_LOG_INFO("ClassicBT::searchAndInitiatePair",
-                             "Find camera %s, addr=%s",
-                             targetName.c_str(),
+                NSG_LOG_INFO("ClassicBT::searchAndInitiatePair", "Find camera %s, addr=%s", targetName.c_str(),
                              device->getAddress().toString().c_str());
                 memcpy(classicAddr, device->getAddress().getNative(), ESP_BD_ADDR_LEN);
                 deviceFound = true;
@@ -114,33 +113,24 @@ bool ClassicBT::searchAndInitiatePair(uint32_t searchTimeoutMs) {
 
 uint32_t ClassicBT::getPairCode() { return pairCode; }
 
-bool ClassicBT::confirmPairCode(bool accept) {
+void ClassicBT::confirmPairCode(bool accept) {
     serialBT.confirmReply(accept);
     if (!accept) {
-        NSG_LOG_INFO("ClassicBT::confirmPairCode", "Pair code rejected by user");
-        return false;
+        NSG_LOG_WARN("ClassicBT::confirmPairCode", "Pair code rejected by user");
     }
-
-    uint32_t authStart = millis();
-    // wait 2 mins for auth, aka user click confirm on camera
-    while (!authDone && millis() - authStart < 120000) {
-        delay(100);
-    }
-
-    if (!authDone) {
-        NSG_LOG_ERROR("ClassicBT::confirmPairCode", "Classic BT auth timed out (120s)");
-        return false;
-    }
-
-    if (authSuccess) {
-        // give camera sometime to make the connection
-        delay(6000);
-        NSG_LOG_INFO("ClassicBT::confirmPairCode", "Classic BT bond established");
-    }
-
-    return authSuccess;
+    // set start time
+    authStart = millis();
 }
 
-const uint8_t* ClassicBT::getClassicAddr() const {
-    return classicAddr;
+// check if pairing is done, either report finished, or timeout
+// user should also check isPairingSuccess() for the final status
+bool ClassicBT::isPairingDone(const uint32_t timeoutMs) {
+    if (!authDone) // not finished, check timing, considering done if timeout
+        return millis() - authStart >= timeoutMs;
+    else // already finished
+        return true;
 }
+
+bool ClassicBT::isPairingSuccess() { return authSuccess; }
+
+const uint8_t* ClassicBT::getClassicAddr() const { return classicAddr; }
