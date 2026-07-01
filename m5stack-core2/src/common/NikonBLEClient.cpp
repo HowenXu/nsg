@@ -56,7 +56,7 @@ bool NikonBLEClient::doHandshake(BLEAddress address, const uint8_t addrType) {
     }
 
     NSG_LOG_DEBUG("NikonBLEClient::doHandshake", "[%s] BLE connecting...", address.toString().c_str());
-    // connect with timeout 45s, when camera goes to idle, it still broadcast, but takes longer to connect
+    // connect with timeout 45s, when camera goes to idle, it still broadcast, but takes longer (~30s) to connect
     if (!pClient->connect(address, addrType, 45000)) {
         NSG_LOG_ERROR("NikonBLEClient::doHandshake", "[%s] BLE failed to connect", address.toString().c_str());
         return false;

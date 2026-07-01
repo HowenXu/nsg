@@ -3,9 +3,9 @@
 #include <M5Unified.h>
 
 #include "../common/NikonBLEClient.h"
+#include "../common/NikonBLEScanner.h"
 #include "Config.h"
 #include "Logging.h"
-#include "../common/NikonBLEScanner.h"
 
 NormalMode::NormalMode() : connectedCameras() {}
 
@@ -30,6 +30,10 @@ void NormalMode::setup() {
         NSG_LOG_FATAL("NormalSetup", "failed to start BLE scanning");
     }
 
+    // init GNSS
+    // TODO: GNSS pin and baud rate as build flag/option?
+    gnss.begin(38400, SERIAL_8N1, 13, 14);
+
     // TODO: check RTC, if year < 2026, force waiting for GPS fix to update time
 
     // TODO: currently do not need screen, add timeout for backlight?
@@ -37,6 +41,14 @@ void NormalMode::setup() {
 }
 
 void NormalMode::loop() {
+    // first process GNSS UART
+    bool nmeaGotNewCommand = false;
+    while (gnss.available()) {
+        if (nmea.process(gnss.read())) {
+            nmeaGotNewCommand = true;
+        }
+    }
+    // process BLE scan queue
     ScannedCamera scanned;
     bool scanStopped = false;
     while (xQueueReceive(scanner->scanResultQueue, &scanned, (TickType_t)0)) {
@@ -51,8 +63,8 @@ void NormalMode::loop() {
                 }
                 if (!item.pClient) {
                     if (countActiveBLEConnections() >= CONFIG_BTDM_CTRL_BLE_MAX_CONN) {
-                        NSG_LOG_WARN("NormalLoop", "Max BLE connections (%d) reached, skipping %s",
-                                     CONFIG_BTDM_CTRL_BLE_MAX_CONN, item.info.bleName.c_str());
+                        NSG_LOG_WARN("NormalLoop", "Max BLE connections (%d) reached, skipping %s", CONFIG_BTDM_CTRL_BLE_MAX_CONN,
+                                     item.info.bleName.c_str());
                         continue;
                     }
                     item.pClient.reset(new NikonBLEClient(rnd, item.info.device, item.info.nonce));
@@ -62,6 +74,7 @@ void NormalMode::loop() {
                         scanStopped = true;
                     }
                     auto bleAddr = BLEAddress(scanned.addr);
+                    // TODO: handshake is blocking, will it hurt anything?
                     if (!item.pClient->doHandshake(bleAddr, scanned.addrType)) {
                         NSG_LOG_ERROR("NormalLoop", "Failed to reconnect to %s due to handshake failure", bleAddr.toString().c_str());
                         // clean up stale client asap
@@ -75,34 +88,69 @@ void NormalMode::loop() {
         }
     }
 
-    // loop through clients, send broadcast if interval is reached
-    TimeMessage timeMessage(0, 0, 0, 0, 0, 0, 0, 0, 0);
-    for (auto& item : connectedCameras) {
-        if (millis() - item.lastBroadcastMillis < 15000) continue;
-        if (!item.pClient) continue;
-        if (!item.pClient->isConnected()) continue;
-        // stop scanning to free up the attenna
-        if (!scanStopped) {
-            scanner->stopScanning();
-            scanStopped = true;
-        }
-        // Start sending payload
-        NSG_LOG_INFO("NormalLoop", "Sending TIME payload to %s...", item.info.bleName.c_str());
-        updateTimeMessageWithRTC(timeMessage);
-        if (!item.pClient->sendTimePayload(timeMessage)) {
-            NSG_LOG_WARN("NormalLoop", "Failed to send TIME payload to %s", item.info.bleName.c_str());
-            item.pClient->disconnect();
-        }
-        NSG_LOG_INFO("NormalLoop", "Sending GEO payload to %s...", item.info.bleName.c_str());
-        // TODO: hook up GPS
-        auto geoMessage = generateGeoMessage(0.0, 0.0, 1234, 10, 1);
-        if (!item.pClient->sendGeoPayload(geoMessage)) {
-            NSG_LOG_WARN("NormalLoop", "Failed to send GEO payload to %s", item.info.bleName.c_str());
-            item.pClient->disconnect();
+    // if we got update from GPS
+    if (nmeaGotNewCommand) {
+        // sync time from GNSS every 2 minutes
+        if (nmea.isValid() && (millis() - nmeaLastSync > 120000 || nmeaLastSync == 0)) {
+            uint16_t year = nmea.getYear();
+            uint8_t month = nmea.getMonth();
+            uint8_t day = nmea.getDay();
+            uint8_t hour = nmea.getHour();
+            uint8_t minute = nmea.getMinute();
+            uint8_t second = nmea.getSecond();
+            // ensure we have valid time after fix, maybe RMC sentence will come after location fixed
+            if (year >= 2026) {
+                // we don't know weekday from GNSS, set it to 0
+                M5.Rtc.setDateTime({{(int16_t)year, (int8_t)month, (int8_t)day, 0}, {(int8_t)hour, (int8_t)minute, (int8_t)second}});
+                NSG_LOG_INFO("NormalMode::loop", "Synced time from GNSS: %04d/%02d/%02d %02d:%02d:%02d", year, month, day, hour, minute, second);
+                nmeaLastSync = millis();
+            }
         }
 
-        // update broadcast time
-        item.lastBroadcastMillis = millis();
+        TimeMessage timeMessage(0, 0, 0, 0, 0, 0, 0, 0, 0);
+        uint8_t gnssValid = nmea.isValid() ? 1 : 0;
+        // lat and lon returned in millionths of a degree
+        double lat = ((double)nmea.getLatitude()) / 1000000.0;
+        double lon = ((double)nmea.getLongitude()) / 1000000.0;
+        int32_t altitude = 0;
+        if (!nmea.getAltitude(altitude)) {
+            altitude = 0;
+            gnssValid = 0;
+        }
+        // altitude returned in millimeter
+        altitude = altitude / 1000;
+        uint8_t satellites = nmea.getNumSatellites();
+        // loop through cameras and send payload
+        for (auto& item : connectedCameras) {
+            // TODO: broadcast interval as build flag/option?
+            if (millis() - item.lastBroadcastMillis < 30000) continue;
+            if (!item.pClient) continue;
+            if (!item.pClient->isConnected()) continue;
+
+            // stop scanning to free up the attenna
+            if (!scanStopped) {
+                scanner->stopScanning();
+                scanStopped = true;
+            }
+            // sending TIME payload
+            updateTimeMessageWithRTC(timeMessage);
+            NSG_LOG_INFO("NormalLoop", "Sending TIME payload to %s...", item.info.bleName.c_str());
+            if (!item.pClient->sendTimePayload(timeMessage)) {
+                NSG_LOG_WARN("NormalLoop", "Failed to send TIME payload to %s", item.info.bleName.c_str());
+                item.pClient->disconnect();
+            }
+            // sending GEO payload
+            NSG_LOG_INFO("NormalLoop", "Sending GEO payload to %s...", item.info.bleName.c_str());
+            auto geoMessage = generateGeoMessage(lat, lon, altitude, satellites, gnssValid);
+            if (!item.pClient->sendGeoPayload(geoMessage)) {
+                NSG_LOG_WARN("NormalLoop", "Failed to send GEO payload to %s", item.info.bleName.c_str());
+                item.pClient->disconnect();
+            }
+            NSG_LOG_INFO("NormalMode::loop", "GNSS: valid=%d, lat=%f, lon=%f, alt=%d, sat=%d", gnssValid, lat, lon, altitude, satellites);
+
+            // update broadcast time
+            item.lastBroadcastMillis = millis();
+        }
     }
 
     // if scan stopped, resume scan

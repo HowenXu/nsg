@@ -86,6 +86,8 @@ void setup() {
     if (!M5.Rtc.begin()) {
         NSG_LOG_FATAL("MainSetup", "failed to initialize RTC");
     }
+    // set power LED to on
+    M5.Power.setLed(255);
 
     // init BLE stack (required by both boot modes)
     Esp32RandomGenerator rnd;
@@ -117,8 +119,17 @@ void setup() {
     }
 }
 
+static uint32_t mainTimer = 0;
+
 void loop() {
     M5.update();
+    if (millis() - mainTimer > 60000) {
+        auto& pwr = M5.Power;
+        NSG_LOG_INFO("MainLoop", "Battery level=%d%%, volt=%dmV, current=%dmA", pwr.getBatteryLevel(), pwr.getBatteryVoltage(),
+                     pwr.getBatteryCurrent());
+        mainTimer = millis();
+    }
+
     switch (bootModeType) {
         case BootModeEnum::NORMAL:
             if (normalMode) {
