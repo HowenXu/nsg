@@ -64,9 +64,6 @@ void NormalMode::setup() {
     if (!scanner->startScanning()) {
         NSG_LOG_FATAL("NormalSetup", "failed to start BLE scanning");
     }
-
-    // TODO: currently do not need screen, add timeout for backlight?
-    M5.Display.setBrightness(0);
 }
 
 void NormalMode::loop() {

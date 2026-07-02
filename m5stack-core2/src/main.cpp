@@ -6,63 +6,53 @@
 #include "Config.h"
 #include "Esp32RandomGenerator.h"
 #include "Logging.h"
+#include "Screen.h"
 #include "Utils.h"
 #include "normal/NormalMode.h"
 #include "pairing/PairingMode.h"
 
-void drawCentered(const String& text, int y, int textSize = 2, uint32_t color = TFT_WHITE) {
-    M5.Display.setTextSize(textSize);
-    M5.Display.setTextColor(color, TFT_BLACK);
-    M5.Display.setTextDatum(middle_center);
-    M5.Display.drawString(text, M5.Display.width() / 2, y);
-}
-
 BootModeEnum detectBootMode() {
-    const unsigned long WAIT_MS = 5000;
-    const unsigned long THRESHOLD_MS = 1000;
-    const unsigned long REFRESH_MS = 30;
-
-    unsigned long startMs = millis();
-    unsigned long touched = 0;
+    const uint32_t WAIT_MS = 6000;
+    const uint32_t THRESHOLD_MS = 1200;
+    const uint32_t REFRESH_MS = 30;
 
     // draw text
-    M5.Display.fillScreen(TFT_BLACK);
-    drawCentered("Holding Button C to", M5.Display.height() / 2 - 45, 2);
-    drawCentered("Pair new device", M5.Display.height() / 2 - 5, 3, TFT_YELLOW);
+    screen.clearScreen();
+    screen.drawStringMiddleCenter("Holding Btn C to", 3, 0xFFFF00, 0x000000, screen.height() / 2 - 45);
+    screen.drawStringMiddleCenter("pair new device", 3, 0xFFFF00, 0x000000, screen.height() / 2 - 5);
+
+    uint32_t startMs = millis();
+    uint32_t touched = 0;
 
     while (millis() - startMs < WAIT_MS) {
         M5.update();
-
-        // check BtnC pressed and give vib feedback
+        // check BtnC pressed and give feedback
+        // here we use M5.BtnC directly to avoid setup sequence issue
         if (M5.BtnC.isPressed()) {
-            M5.Power.setVibration(128);
+            if (M5.BtnC.wasPressed()) {
+                // a short beep on detection to notify user the press has been registered
+                M5.Speaker.tone(1000, 100);
+            }
             touched += REFRESH_MS;
             if (touched >= THRESHOLD_MS) break;
         } else {
-            M5.Power.setVibration(0);
             touched = 0;
         }
 
         // show counter
-        int remaining = (WAIT_MS - (millis() - startMs)) / 1000;
-        // This will cause flickering
-        // M5.Display.fillRect(0, M5.Display.height() / 2 + 30, M5.Display.width(), 40, TFT_BLACK);
-        drawCentered(String("Auto normal in ") + remaining + "s", M5.Display.height() / 2 + 50, 2, TFT_LIGHTGREY);
-
+        uint32_t remaining = (WAIT_MS - (millis() - startMs)) / 1000;
+        auto autoBootStr = String("Auto normal in ") + remaining + "s";
+        screen.drawStringMiddleCenter(autoBootStr.c_str(), 2, 0xd3d3d3, 0x000000, screen.height() / 2 + 50);
         delay(REFRESH_MS);
     }
-    // reset vib
-    M5.Power.setVibration(0);
 
-    // show result
-    M5.Display.fillScreen(TFT_BLACK);
+    // clear screen
+    screen.clearScreen();
     if (touched >= THRESHOLD_MS) {
-        NSG_LOG_INFO("DetectBootMode", "Booting into pairing mode...");
-        drawCentered("Pairing Mode", M5.Display.height() / 2, 3, TFT_GREEN);
+        NSG_LOG_INFO("detectBootMode", "Booting into pairing mode...");
         return BootModeEnum::PAIRING;
     } else {
-        NSG_LOG_INFO("DetectBootMode", "Booting into normal mode...");
-        drawCentered("Normal Mode", M5.Display.height() / 2, 3, TFT_CYAN);
+        NSG_LOG_INFO("detectBootMode", "Booting into normal mode...");
         return BootModeEnum::NORMAL;
     }
 }
@@ -86,9 +76,10 @@ void setup() {
     if (!M5.Rtc.begin()) {
         NSG_LOG_FATAL("MainSetup", "failed to initialize RTC");
     }
-    // set power LED to on
+    // init device
     M5.Power.setLed(255);
     M5.Speaker.setVolume(255);
+    M5.Display.setBrightness(255);
 
     // init BLE stack (required by both boot modes)
     Esp32RandomGenerator rnd;
@@ -118,18 +109,14 @@ void setup() {
             NSG_LOG_FATAL("MainSetup", "Unexpected boot type");
             break;
     }
+    // sync screen backlight status
+    screen.turnOnBacklight();
 }
-
-static uint32_t mainTimer = 0;
 
 void loop() {
     M5.update();
-    if (millis() - mainTimer > 60000) {
-        auto& pwr = M5.Power;
-        NSG_LOG_INFO("MainLoop", "Battery level=%d%%, volt=%dmV, current=%dmA", pwr.getBatteryLevel(), pwr.getBatteryVoltage(),
-                     pwr.getBatteryCurrent());
-        mainTimer = millis();
-    }
+
+    screen.loopBeforeApp();
 
     switch (bootModeType) {
         case BootModeEnum::NORMAL:
@@ -152,4 +139,6 @@ void loop() {
             NSG_LOG_FATAL("MainLoop", "Unexpected boot type");
             break;
     }
+
+    screen.loopAfterApp();
 }
