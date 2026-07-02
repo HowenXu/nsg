@@ -21,7 +21,9 @@ class ConnectedCamera {
 
     SavedCameraInfo info;
     std::unique_ptr<NikonBLEClient> pClient;
-    uint32_t lastBroadcastMillis;
+    uint32_t lastBroadcastMillis = 0;
+
+    bool lastGeoValid = false;
 };
 
 #endif

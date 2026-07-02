@@ -108,6 +108,7 @@ void NormalMode::loop() {
                     } else {
                         NSG_LOG_INFO("NormalLoop", "BLE connected to %s", bleAddr.toString().c_str());
                         item.lastBroadcastMillis = 0;
+                        item.lastGeoValid = false;
                     }
                 }
             }
@@ -165,14 +166,17 @@ void NormalMode::loop() {
                     NSG_LOG_WARN("NormalLoop", "Failed to send TIME payload to %s", item.info.bleName.c_str());
                     item.pClient->disconnect();
                 }
-                // sending GEO payload
-                NSG_LOG_INFO("NormalLoop", "Sending GEO payload to %s...", item.info.bleName.c_str());
-                auto geoMessage = generateGeoMessage(lat, lon, altitude, satellites, gnssValid);
-                if (!item.pClient->sendGeoPayload(geoMessage)) {
-                    NSG_LOG_WARN("NormalLoop", "Failed to send GEO payload to %s", item.info.bleName.c_str());
-                    item.pClient->disconnect();
+                // sending GEO payload, skip if we already sent a invalid GEO payload
+                // otherwise, if we kept sending invalid GEO payload, camera will reject
+                if (item.lastGeoValid || gnssValid) {
+                    NSG_LOG_INFO("NormalLoop", "Sending GEO payload to %s...", item.info.bleName.c_str());
+                    auto geoMessage = generateGeoMessage(lat, lon, altitude, satellites, gnssValid);
+                    if (!item.pClient->sendGeoPayload(geoMessage)) {
+                        NSG_LOG_WARN("NormalLoop", "Failed to send GEO payload to %s", item.info.bleName.c_str());
+                        item.pClient->disconnect();
+                    }
+                    item.lastGeoValid = gnssValid;
                 }
-                NSG_LOG_INFO("NormalMode::loop", "GNSS: valid=%d, lat=%f, lon=%f, alt=%d, sat=%d", gnssValid, lat, lon, altitude, satellites);
 
                 // update broadcast time
                 item.lastBroadcastMillis = millis();

@@ -23,6 +23,8 @@
 #define NIKON_BT_AFTER_PAIR_TIME_MS 6000
 #endif
 
+#define SCANNING_PAGE_SIZE 5
+
 class PairingMode : public BootMode {
    public:
     PairingMode();
@@ -45,12 +47,14 @@ class PairingMode : public BootMode {
     uint32_t timeAfterPairSuccess = 0;
 
     void handleScanResults();
-    void selectFirstCamera();
+    void handleScanningInput();
+
     void doBLEHandshake();
     void startPairingFlow();
     void showCodeAndWaitConfirm();
     void waitPairingResult();
     void saveAndReboot();
+
 };
 
 #endif  // PAIRING_MODE_H

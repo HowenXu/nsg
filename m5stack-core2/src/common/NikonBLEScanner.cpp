@@ -92,8 +92,6 @@ void NikonBLEScanner::onResult(BLEAdvertisedDevice advertisedDevice) {
         if (manufacturerDataKey == 0x0399) return;
     }
 
-    NSG_LOG_DEBUG("NikonBLEScanner::onResult", "found device %s, addr=%s", deviceName.c_str(), deviceAddr.toString().c_str());
-
     // create a queue message
     ScannedCamera camera;
     fillScannedCamera(&camera, deviceName, device, deviceAddr, advertisedDevice.getAddressType());

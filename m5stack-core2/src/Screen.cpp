@@ -103,13 +103,19 @@ const m5::Button_Class* Screen::btnC() const {
 
 void Screen::markActive() { lastActive = millis(); }
 
-bool Screen::shouldDraw() const { return shouldDrawFrame; }
+bool Screen::isOnFrame() const { return shouldDrawFrame; }
+
+bool Screen::isTouchSuppressed() const { return touchSuppressed; }
 
 int32_t Screen::width() const { return M5.Display.width(); }
 
 int32_t Screen::height() const { return M5.Display.height(); }
 
 int32_t Screen::topBarHeight() const { return 20; }
+
+bool Screen::shouldDraw() const { return isOn() && isOnFrame(); }
+
+bool Screen::shouldHandleInput() const { return isOn() && !isTouchSuppressed(); }
 
 void Screen::clearScreen() { M5.Display.fillScreen(0x000000); }
 
@@ -125,6 +131,18 @@ void Screen::drawString(const char* buffer, float textSize, uint32_t fgRGB, uint
 
 void Screen::drawStringMiddleCenter(const char* buffer, float textSize, uint32_t fgRGB, uint32_t bgRGB, int32_t y) {
     drawString(buffer, textSize, fgRGB, bgRGB, middle_center, width() / 2, y);
+}
+
+void Screen::drawStringAboveBtnA(const char* buffer, float textSize, uint32_t fgRGB, uint32_t bgRGB) {
+    drawString(buffer, textSize, fgRGB, bgRGB, bottom_left, 30, height() - 2);
+}
+
+void Screen::drawStringAboveBtnB(const char* buffer, float textSize, uint32_t fgRGB, uint32_t bgRGB) {
+    drawString(buffer, textSize, fgRGB, bgRGB, bottom_center, width() / 2, height() - 2);
+}
+
+void Screen::drawStringAboveBtnC(const char* buffer, float textSize, uint32_t fgRGB, uint32_t bgRGB) {
+    drawString(buffer, textSize, fgRGB, bgRGB, bottom_right, width() - 30, height() - 2);
 }
 
 void Screen::turnOnBacklight() {

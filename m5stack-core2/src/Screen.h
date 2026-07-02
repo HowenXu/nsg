@@ -25,14 +25,22 @@ class Screen {
     // should call after app loop
     void loopAfterApp();
     bool isOn() const;
-    bool shouldDraw() const;
+    bool isOnFrame() const;
+    bool isTouchSuppressed() const;
     int32_t width() const;
     int32_t height() const;
     int32_t topBarHeight() const;
 
+    bool shouldDraw() const;
+    bool shouldHandleInput() const;
+
     void clearScreen();
     void drawString(const char* buffer, float textSize, uint32_t fgRGB, uint32_t bgRGB, textdatum_t datum, int32_t x, int32_t y);
     void drawStringMiddleCenter(const char* buffer, float textSize, uint32_t fgRGB, uint32_t bgRGB, int32_t y);
+
+    void drawStringAboveBtnA(const char* buffer, float textSize, uint32_t fgRGB, uint32_t bgRGB);
+    void drawStringAboveBtnB(const char* buffer, float textSize, uint32_t fgRGB, uint32_t bgRGB);
+    void drawStringAboveBtnC(const char* buffer, float textSize, uint32_t fgRGB, uint32_t bgRGB);
 
     void turnOnBacklight();
     void turnOffBacklight();
