@@ -88,6 +88,7 @@ void setup() {
     }
     // set power LED to on
     M5.Power.setLed(255);
+    M5.Speaker.setVolume(255);
 
     // init BLE stack (required by both boot modes)
     Esp32RandomGenerator rnd;

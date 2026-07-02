@@ -50,6 +50,7 @@ void Logging::error(const char* logger, const char* fmt, ...) {
     }
 }
 
+// TODO: replace this with a better fatal state: speaker beep, screen show message, serial print error log, device lock/stuck
 [[noreturn]] void Logging::fatal(const char* logger, const char* fmt, ...) {
     char msg[LOG_BUFFER_SIZE];
     va_list args;

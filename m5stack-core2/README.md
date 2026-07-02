@@ -3,7 +3,7 @@
 ## Hardware
 
 - M5Stack Core2 v1.1
-- u-blox NEO-M9N GPS module
+- u-blox NEO-M10 GPS module
 
 ## Software approach
 

@@ -6,6 +6,7 @@
 #include "../common/NikonBLEScanner.h"
 #include "Config.h"
 #include "Logging.h"
+#include "UBlox.h"
 
 NormalMode::NormalMode() : connectedCameras() {}
 
@@ -25,16 +26,51 @@ void NormalMode::setup() {
         connectedCameras.emplace_back(saved);
     }
 
+    // init GNSS
+    // TODO: GNSS pin and baud rate as build flag/option?
+    gnss.setRxBufferSize(4096);
+    gnss.begin(115200, SERIAL_8N1, 13, 14);
+
+    // send signal config with fallback baud rate
+    NSG_LOG_INFO("NormalMode::setup", "Config UBlox GNSS...");
+    while (true) {
+        // drain rx buffer before send ublox command
+        while (gnss.available()) gnss.read();
+        if (UBlox::sendSatelliteConfig(gnss)) {
+            // give ublox GNSS subsystem a bit time to restart after satellite config changes
+            delay(500);
+            break;
+        }
+        // still fail
+        // note: APB clock is always 80MHz,
+        //   for 38400, hardware timer is set to 2080, so baud rate is 80MHz / 2080 = 38461.54 (38461)
+        //   for 115200, hw timer is set to 690, so baud rate is 80MHz / 690 = 115942
+        if (gnss.baudRate() >= 115000) {
+            NSG_LOG_INFO("NormalMode::setup", "Change GNSS baud rate from %d to 38400...", gnss.baudRate());
+            // try the default baud rate
+            gnss.updateBaudRate(38400);
+            // wait for a while
+            delay(1000);
+        } else {
+            // already on default baud rate but still not working
+            M5.Speaker.tone(440, 10000);
+            NSG_LOG_FATAL("NormalMode::setup", "Failed to config UBlox GNSS...");
+        }
+    }
+    // update baud rate to 115200
+    if (gnss.baudRate() < 115000) {
+        if (UBlox::setBaudRate(gnss, 115200)) {
+            gnss.updateBaudRate(115200);
+            NSG_LOG_DEBUG("NormalMode::setup", "Upgraded GNSS baud rate to 115200");
+        } else {
+            NSG_LOG_FATAL("NormalMode::setup", "Failed to set GNSS baud rate to 115200");
+        }
+    }
+
     scanner.reset(new NikonBLEScanner(NikonBLEScannerMode::PAIRED));
     if (!scanner->startScanning()) {
         NSG_LOG_FATAL("NormalSetup", "failed to start BLE scanning");
     }
-
-    // init GNSS
-    // TODO: GNSS pin and baud rate as build flag/option?
-    gnss.begin(38400, SERIAL_8N1, 13, 14);
-
-    // TODO: check RTC, if year < 2026, force waiting for GPS fix to update time
 
     // TODO: currently do not need screen, add timeout for backlight?
     M5.Display.setBrightness(0);
