@@ -85,6 +85,7 @@ bool ClassicBT::searchAndInitiatePair(uint32_t searchTimeoutMs) {
             }
         }
         serialBT.discoverClear();
+        yield();
     }
 
     if (!deviceFound) {
@@ -98,17 +99,11 @@ bool ClassicBT::searchAndInitiatePair(uint32_t searchTimeoutMs) {
     authSuccess = false;
     BTA_DmBond(classicAddr);
 
-    uint32_t bondStart = millis();
-    while (!pairCodeReady && millis() - bondStart < 30000) {
-        delay(100);
-    }
-
-    if (!pairCodeReady) {
-        NSG_LOG_ERROR("ClassicBT::searchAndInitiatePair", "Classic BT bonding timed out (30s)");
-        return false;
-    }
-
     return true;
+}
+
+bool ClassicBT::isPairCodeReady() {
+    return pairCodeReady;
 }
 
 uint32_t ClassicBT::getPairCode() { return pairCode; }

@@ -13,6 +13,7 @@ class ClassicBT {
     // return true -> start pairing, need to check and confirm code.
     // return false -> failed
     bool searchAndInitiatePair(uint32_t searchTimeoutMs);
+    bool isPairCodeReady();
     uint32_t getPairCode();
     // only send the confirm reply
     void confirmPairCode(bool accept);

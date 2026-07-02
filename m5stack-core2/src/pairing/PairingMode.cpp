@@ -118,8 +118,8 @@ void PairingMode::startPairingFlow() {
 
     // Start Classic Bluetooth pairing.
     classicBT.reset(new ClassicBT(cameraName));
-    // TODO: hardcoded to search for 1 minute.
-    if (!classicBT->searchAndInitiatePair(60000)) {
+    // TODO: blocking? will it hurt anything?
+    if (!classicBT->searchAndInitiatePair(NIKON_BT_SEARCH_TIME_MS)) {
         state = State::FAIL;
         NSG_LOG_ERROR("PairingMode::startPairingFlow", "Failed to search and initiate pairing");
     } else {
@@ -129,10 +129,15 @@ void PairingMode::startPairingFlow() {
 }
 
 void PairingMode::showCodeAndWaitConfirm() {
+    if (!classicBT->isPairCodeReady()) {
+        // TODO: add timeout here?
+        delay(100);
+        return;
+    }
     const uint32_t code = classicBT->getPairCode();
     NSG_LOG_INFO("PairingMode::showCodeAndWaitConfirm", "Pair code: %06u", code);
     // TODO: show code on screen and let user confirm.
-    // TODO: also vibration and speaker beep?
+    // TODO: also speaker beep?
     // TODO: if user reject the code, jump to fail
     classicBT->confirmPairCode(true);
     timeAfterPairSuccess = 0;
@@ -140,7 +145,7 @@ void PairingMode::showCodeAndWaitConfirm() {
 }
 
 void PairingMode::waitPairingResult() {
-    if (!classicBT->isPairingDone(120000)) {
+    if (!classicBT->isPairingDone(NIKON_BT_PAIR_TIMEOUT_MS)) {
         // pairing not done/timeout, keep waiting
         delay(50);
         return;
@@ -150,10 +155,10 @@ void PairingMode::waitPairingResult() {
         if (timeAfterPairSuccess == 0) {
             // set time and start waiting
             timeAfterPairSuccess = millis();
-            NSG_LOG_INFO("PairingMode::waitPairingResult", "Waiting 6s for camera to make connection...");
+            NSG_LOG_INFO("PairingMode::waitPairingResult", "Waiting %d ms for camera to make connection...", NIKON_BT_AFTER_PAIR_TIME_MS);
         }
-        // wait 6s to give camera sometime to make the connection
-        if (millis() - timeAfterPairSuccess < 6000) {
+        // wait extra time for camera to make the connection
+        if (millis() - timeAfterPairSuccess < NIKON_BT_AFTER_PAIR_TIME_MS) {
             delay(50);
             return;  // keep waiting
         } else {

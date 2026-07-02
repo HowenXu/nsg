@@ -11,6 +11,18 @@
 #include "ClassicBT.h"
 #include "Esp32RandomGenerator.h"
 
+#ifndef NIKON_BT_SEARCH_TIME_MS
+#define NIKON_BT_SEARCH_TIME_MS 60000
+#endif
+
+#ifndef NIKON_BT_PAIR_TIMEOUT_MS
+#define NIKON_BT_PAIR_TIMEOUT_MS 120000
+#endif
+
+#ifndef NIKON_BT_AFTER_PAIR_TIME_MS
+#define NIKON_BT_AFTER_PAIR_TIME_MS 6000
+#endif
+
 class PairingMode : public BootMode {
    public:
     PairingMode();

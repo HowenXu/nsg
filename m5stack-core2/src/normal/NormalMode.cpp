@@ -27,9 +27,8 @@ void NormalMode::setup() {
     }
 
     // init GNSS
-    // TODO: GNSS pin and baud rate as build flag/option?
-    gnss.setRxBufferSize(4096);
-    gnss.begin(115200, SERIAL_8N1, 13, 14);
+    gnss.setRxBufferSize(GNSS_RX_BUFFER_SIZE);
+    gnss.begin(UBLOX_GNSS_TARGET_BAUD_RATE, SERIAL_8N1, UBLOX_GNSS_RX_PIN, UBLOX_GNSS_TX_PIN);
 
     // send signal config with fallback baud rate
     NSG_LOG_INFO("NormalMode::setup", "Config UBlox GNSS...");
@@ -41,29 +40,23 @@ void NormalMode::setup() {
             delay(500);
             break;
         }
-        // still fail
-        // note: APB clock is always 80MHz,
-        //   for 38400, hardware timer is set to 2080, so baud rate is 80MHz / 2080 = 38461.54 (38461)
-        //   for 115200, hw timer is set to 690, so baud rate is 80MHz / 690 = 115942
-        if (gnss.baudRate() >= 115000) {
-            NSG_LOG_INFO("NormalMode::setup", "Change GNSS baud rate from %d to 38400...", gnss.baudRate());
-            // try the default baud rate
-            gnss.updateBaudRate(38400);
-            // wait for a while
-            delay(1000);
+        // still fail, try the fallback baud rate
+        if (nearBaudRate(gnss, UBLOX_GNSS_TARGET_BAUD_RATE)) {
+            NSG_LOG_INFO("NormalMode::setup", "Change GNSS baud rate from %d to %d...", gnss.baudRate(), UBLOX_GNSS_FALLBACK_BAUD_RATE);
+            gnss.updateBaudRate(UBLOX_GNSS_FALLBACK_BAUD_RATE);
         } else {
             // already on default baud rate but still not working
             M5.Speaker.tone(440, 10000);
             NSG_LOG_FATAL("NormalMode::setup", "Failed to config UBlox GNSS...");
         }
     }
-    // update baud rate to 115200
-    if (gnss.baudRate() < 115000) {
-        if (UBlox::setBaudRate(gnss, 115200)) {
-            gnss.updateBaudRate(115200);
-            NSG_LOG_DEBUG("NormalMode::setup", "Upgraded GNSS baud rate to 115200");
+    // update baud rate to target
+    if (!nearBaudRate(gnss, UBLOX_GNSS_TARGET_BAUD_RATE)) {
+        if (UBlox::setBaudRate(gnss, UBLOX_GNSS_TARGET_BAUD_RATE)) {
+            gnss.updateBaudRate(UBLOX_GNSS_TARGET_BAUD_RATE);
+            NSG_LOG_DEBUG("NormalMode::setup", "Upgraded GNSS baud rate to %d", UBLOX_GNSS_TARGET_BAUD_RATE);
         } else {
-            NSG_LOG_FATAL("NormalMode::setup", "Failed to set GNSS baud rate to 115200");
+            NSG_LOG_FATAL("NormalMode::setup", "Failed to set GNSS baud rate to %d", UBLOX_GNSS_TARGET_BAUD_RATE);
         }
     }
 
@@ -126,8 +119,8 @@ void NormalMode::loop() {
 
     // if we got update from GPS
     if (nmeaGotNewCommand) {
-        // sync time from GNSS every 2 minutes
-        if (nmea.isValid() && (millis() - nmeaLastSync > 120000 || nmeaLastSync == 0)) {
+        // sync time from GNSS periodically
+        if (nmea.isValid() && (millis() - nmeaLastSync > GNSS_TIME_SYNC_INTERVAL_MS || nmeaLastSync == 0)) {
             uint16_t year = nmea.getYear();
             uint8_t month = nmea.getMonth();
             uint8_t day = nmea.getDay();
@@ -143,49 +136,52 @@ void NormalMode::loop() {
             }
         }
 
-        TimeMessage timeMessage(0, 0, 0, 0, 0, 0, 0, 0, 0);
-        uint8_t gnssValid = nmea.isValid() ? 1 : 0;
-        // lat and lon returned in millionths of a degree
-        double lat = ((double)nmea.getLatitude()) / 1000000.0;
-        double lon = ((double)nmea.getLongitude()) / 1000000.0;
-        int32_t altitude = 0;
-        if (!nmea.getAltitude(altitude)) {
-            altitude = 0;
-            gnssValid = 0;
-        }
-        // altitude returned in millimeter
-        altitude = altitude / 1000;
-        uint8_t satellites = nmea.getNumSatellites();
-        // loop through cameras and send payload
-        for (auto& item : connectedCameras) {
-            // TODO: broadcast interval as build flag/option?
-            if (millis() - item.lastBroadcastMillis < 30000) continue;
-            if (!item.pClient) continue;
-            if (!item.pClient->isConnected()) continue;
+        if (isRTCValid()) {  // only send payload when RTC is valid
+            TimeMessage timeMessage(0, 0, 0, 0, 0, 0, 0, 0, 0);
+            uint8_t gnssValid = nmea.isValid() ? 1 : 0;
+            // lat and lon returned in millionths of a degree
+            double lat = ((double)nmea.getLatitude()) / 1000000.0;
+            double lon = ((double)nmea.getLongitude()) / 1000000.0;
+            int32_t altitude = 0;
+            if (!nmea.getAltitude(altitude)) {
+                altitude = 0;
+                gnssValid = 0;
+            }
+            // altitude returned in millimeter
+            altitude = altitude / 1000;
+            uint8_t satellites = nmea.getNumSatellites();
+            // loop through cameras and send payload
+            for (auto& item : connectedCameras) {
+                if (millis() - item.lastBroadcastMillis < NIKON_BLE_UPDATE_INTERVAL_MS) continue;
+                if (!item.pClient) continue;
+                if (!item.pClient->isConnected()) continue;
 
-            // stop scanning to free up the attenna
-            if (!scanStopped) {
-                scanner->stopScanning();
-                scanStopped = true;
-            }
-            // sending TIME payload
-            updateTimeMessageWithRTC(timeMessage);
-            NSG_LOG_INFO("NormalLoop", "Sending TIME payload to %s...", item.info.bleName.c_str());
-            if (!item.pClient->sendTimePayload(timeMessage)) {
-                NSG_LOG_WARN("NormalLoop", "Failed to send TIME payload to %s", item.info.bleName.c_str());
-                item.pClient->disconnect();
-            }
-            // sending GEO payload
-            NSG_LOG_INFO("NormalLoop", "Sending GEO payload to %s...", item.info.bleName.c_str());
-            auto geoMessage = generateGeoMessage(lat, lon, altitude, satellites, gnssValid);
-            if (!item.pClient->sendGeoPayload(geoMessage)) {
-                NSG_LOG_WARN("NormalLoop", "Failed to send GEO payload to %s", item.info.bleName.c_str());
-                item.pClient->disconnect();
-            }
-            NSG_LOG_INFO("NormalMode::loop", "GNSS: valid=%d, lat=%f, lon=%f, alt=%d, sat=%d", gnssValid, lat, lon, altitude, satellites);
+                // stop scanning to free up the attenna
+                if (!scanStopped) {
+                    scanner->stopScanning();
+                    scanStopped = true;
+                }
+                // sending TIME payload
+                updateTimeMessageWithRTC(timeMessage);
+                NSG_LOG_INFO("NormalLoop", "Sending TIME payload to %s...", item.info.bleName.c_str());
+                if (!item.pClient->sendTimePayload(timeMessage)) {
+                    NSG_LOG_WARN("NormalLoop", "Failed to send TIME payload to %s", item.info.bleName.c_str());
+                    item.pClient->disconnect();
+                }
+                // sending GEO payload
+                NSG_LOG_INFO("NormalLoop", "Sending GEO payload to %s...", item.info.bleName.c_str());
+                auto geoMessage = generateGeoMessage(lat, lon, altitude, satellites, gnssValid);
+                if (!item.pClient->sendGeoPayload(geoMessage)) {
+                    NSG_LOG_WARN("NormalLoop", "Failed to send GEO payload to %s", item.info.bleName.c_str());
+                    item.pClient->disconnect();
+                }
+                NSG_LOG_INFO("NormalMode::loop", "GNSS: valid=%d, lat=%f, lon=%f, alt=%d, sat=%d", gnssValid, lat, lon, altitude, satellites);
 
-            // update broadcast time
-            item.lastBroadcastMillis = millis();
+                // update broadcast time
+                item.lastBroadcastMillis = millis();
+            }
+        } else {
+            NSG_LOG_WARN("NormalMode::loop", "RTC invalid, skip sending BLE payload");
         }
     }
 
@@ -226,4 +222,20 @@ int NormalMode::countActiveBLEConnections() const {
         }
     }
     return count;
+}
+
+bool NormalMode::isRTCValid() {
+    auto datetime = M5.Rtc.getDateTime();
+    return datetime.date.year >= 2026;
+}
+
+bool NormalMode::nearBaudRate(HardwareSerial& serial, uint32_t targetBaudRate) {
+    uint32_t currentBaudRate = serial.baudRate();
+    uint32_t diff = currentBaudRate > targetBaudRate ? currentBaudRate - targetBaudRate : targetBaudRate - currentBaudRate;
+    // note: APB clock is always 80MHz,
+    //   for 38400, hardware timer is set to 2080, so baud rate is 80MHz / 2080 = 38461.54 (38461)
+    //   for 115200, hw timer is set to 690, so baud rate is 80MHz / 690 = 115942
+    //   so we need to check if the diff is smaller than 2%
+    uint32_t gate = targetBaudRate / 50;
+    return diff <= gate;
 }
