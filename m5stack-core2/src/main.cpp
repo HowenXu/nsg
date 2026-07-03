@@ -62,6 +62,8 @@ NormalMode* normalMode = nullptr;
 PairingMode* pairingMode = nullptr;
 
 void setup() {
+    // set CPU to 160MHz to save power
+    setCpuFrequencyMhz(160);
     // enable default serial as monitor
     Serial.begin(115200);
     NSG_LOG_DEBUG("MainSetup", "Serial initialized");

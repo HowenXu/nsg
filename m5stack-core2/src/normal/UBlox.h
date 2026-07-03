@@ -8,8 +8,8 @@ namespace UBlox {
 // reference: u-blox M10 SPG 5.10 Interface Description, chapter 3
 void sendMessage(HardwareSerial& ublox, uint8_t classID, uint8_t msgID, const uint8_t* payload, uint16_t length);
 
-// send config to enable GPS, SBAS, Galileo, BeiDou and QZSS
-bool sendSatelliteConfig(HardwareSerial& ublox);
+// send config for satellites and power management
+bool sendConfig(HardwareSerial& ublox);
 
 bool setBaudRate(HardwareSerial& ublox, uint32_t baudRate);
 

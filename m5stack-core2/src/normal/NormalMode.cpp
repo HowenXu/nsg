@@ -24,7 +24,7 @@ void NormalMode::setup() {
     while (true) {
         // drain rx buffer before send ublox command
         while (gnss.available()) gnss.read();
-        if (UBlox::sendSatelliteConfig(gnss)) {
+        if (UBlox::sendConfig(gnss)) {
             // give ublox GNSS subsystem a bit time to restart after satellite config changes
             delay(500);
             break;

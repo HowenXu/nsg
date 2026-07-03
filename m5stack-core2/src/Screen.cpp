@@ -160,7 +160,7 @@ void Screen::drawStringAboveBtnC(const char* buffer, float textSize, uint32_t fg
 }
 
 void Screen::turnOnBacklight() {
-    M5.Display.setBrightness(255);
+    M5.Display.wakeup();
     backlight = true;
     markActive();
     // check touch and button status, suppress them if they are touched while backlight is off
@@ -173,5 +173,5 @@ void Screen::turnOnBacklight() {
 
 void Screen::turnOffBacklight() {
     backlight = false;
-    M5.Display.setBrightness(0);
+    M5.Display.sleep();
 }

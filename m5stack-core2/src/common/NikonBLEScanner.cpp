@@ -24,7 +24,7 @@ bool NikonBLEScanner::startScanning() {
     pBLEScan->setActiveScan(true);
     // scan interval in MS
     pBLEScan->setInterval(100);
-    pBLEScan->setWindow(90);
+    pBLEScan->setWindow(80);
 
     NSG_LOG_INFO("NikonBLEScanner::startScanning", "start scanning...");
     // false to clear result, otherwise if camera's manufacturer data update,
