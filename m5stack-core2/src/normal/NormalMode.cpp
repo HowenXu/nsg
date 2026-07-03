@@ -6,6 +6,7 @@
 #include "../common/NikonBLEScanner.h"
 #include "Config.h"
 #include "Logging.h"
+#include "Screen.h"
 #include "UBlox.h"
 
 NormalMode::NormalMode() : connectedCameras() {}
@@ -108,11 +109,68 @@ void NormalMode::loop() {
                     } else {
                         NSG_LOG_INFO("NormalLoop", "BLE connected to %s", bleAddr.toString().c_str());
                         item.lastBroadcastMillis = 0;
-                        item.lastGeoValid = false;
                     }
                 }
             }
         }
+        yield();
+    }
+
+    uint8_t gnssValid = nmea.isValid() ? 1 : 0;
+    // lat and lon returned in millionths of a degree
+    double lat = ((double)nmea.getLatitude()) / 1000000.0;
+    double lon = ((double)nmea.getLongitude()) / 1000000.0;
+    int32_t altitude = 0;
+    if (!nmea.getAltitude(altitude)) {
+        altitude = 0;
+        gnssValid = 0;
+    }
+    // altitude returned in millimeter
+    altitude = altitude / 1000;
+    uint8_t satellites = nmea.getNumSatellites();
+
+    if (screen.shouldDraw()) {
+        screen.drawStringMiddleCenter("NSG", 3, 0xFFFFFF, 0x000000, screen.topBarHeight() + 20);
+        // light gray if fixed, otherwise dark gray
+        uint32_t textColor = gnssValid ? 0xd3d3d3 : 0x404040;
+        int32_t textX = 60;
+
+        char buffer[64];
+        // GNSS fix, cyan if fixed, otherwise yellow
+        // extra 2 space to cover INVALID with VALID
+        snprintf(buffer, sizeof(buffer), "FIX: %s  ", gnssValid ? "VALID" : "INVALID");
+        screen.drawString(buffer, 2, gnssValid ? 0x00FFFF : 0xFFFF00, 0x000000,  //
+                          middle_left, textX, screen.topBarHeight() + 50);
+        // latitude
+        auto latAbs = std::fabs(lat);
+        uint8_t latD = static_cast<uint8_t>(latAbs);
+        double latM = (latAbs - latD) * 60.0;
+        snprintf(buffer, sizeof(buffer), "LAT: %s %3d\xf8 %06.3f'   ", lat >= 0 ? "N" : "S", latD, latM);
+        screen.drawStringCP437(buffer, 2, textColor, 0x000000,  //
+                               middle_left, textX, screen.topBarHeight() + 75);
+        // longitude
+        auto lonAbs = std::fabs(lon);
+        uint8_t lonD = static_cast<uint8_t>(lonAbs);
+        double lonM = (lonAbs - lonD) * 60.0;
+        snprintf(buffer, sizeof(buffer), "LON: %s %3d\xf8 %06.3f'   ", lon >= 0 ? "E" : "W", lonD, lonM);
+        screen.drawStringCP437(buffer, 2, textColor, 0x000000,  //
+                               middle_left, textX, screen.topBarHeight() + 100);
+        // altitude, some extra space to cover digits change
+        snprintf(buffer, sizeof(buffer), "ALT: %s %d M      ", altitude >= 0 ? "+" : "-", altitude >= 0 ? altitude : -altitude);
+        screen.drawString(buffer, 2, textColor, 0x000000,  //
+                          middle_left, textX, screen.topBarHeight() + 125);
+        // satellites count
+        snprintf(buffer, sizeof(buffer), "SAT: %d      ", satellites);
+        screen.drawString(buffer, 2, textColor, 0x000000,  //
+                          middle_left, textX, screen.topBarHeight() + 150);
+        // BLE connection
+        snprintf(buffer, sizeof(buffer), "BLE: %d / %d      ", countActiveBLEConnections(), CONFIG_BTDM_CTRL_BLE_MAX_CONN);
+        screen.drawString(buffer, 2, 0xd3d3d3, 0x000000,  //
+                          middle_left, textX, screen.topBarHeight() + 175);
+        // Paired devices
+        snprintf(buffer, sizeof(buffer), "CAM: %d / %d      ", connectedCameras.size(), CONFIG_BT_SMP_MAX_BONDS);
+        screen.drawString(buffer, 2, 0xd3d3d3, 0x000000,  //
+                          middle_left, textX, screen.topBarHeight() + 200);
     }
 
     // if we got update from GPS
@@ -134,20 +192,11 @@ void NormalMode::loop() {
             }
         }
 
-        if (isRTCValid()) {  // only send payload when RTC is valid
+        // only send payload when RTC is valid
+        // since GEO payload has time info, and camera will check the time
+        // if the time in GEO payload drift from camera's clock, it reject the payload
+        if (isRTCValid()) {
             TimeMessage timeMessage(0, 0, 0, 0, 0, 0, 0, 0, 0);
-            uint8_t gnssValid = nmea.isValid() ? 1 : 0;
-            // lat and lon returned in millionths of a degree
-            double lat = ((double)nmea.getLatitude()) / 1000000.0;
-            double lon = ((double)nmea.getLongitude()) / 1000000.0;
-            int32_t altitude = 0;
-            if (!nmea.getAltitude(altitude)) {
-                altitude = 0;
-                gnssValid = 0;
-            }
-            // altitude returned in millimeter
-            altitude = altitude / 1000;
-            uint8_t satellites = nmea.getNumSatellites();
             // loop through cameras and send payload
             for (auto& item : connectedCameras) {
                 if (millis() - item.lastBroadcastMillis < NIKON_BLE_UPDATE_INTERVAL_MS) continue;
@@ -172,12 +221,14 @@ void NormalMode::loop() {
                     NSG_LOG_INFO("NormalLoop", "Sending GEO payload to %s...", item.info.bleName.c_str());
                     auto geoMessage = generateGeoMessage(lat, lon, altitude, satellites, gnssValid);
                     if (!item.pClient->sendGeoPayload(geoMessage)) {
+                        // camera rejected the message, set last geo invalid so we won't send invalid GEO again on reconnect
+                        item.lastGeoValid = false;
                         NSG_LOG_WARN("NormalLoop", "Failed to send GEO payload to %s", item.info.bleName.c_str());
                         item.pClient->disconnect();
+                    } else {
+                        item.lastGeoValid = gnssValid;
                     }
-                    item.lastGeoValid = gnssValid;
                 }
-
                 // update broadcast time
                 item.lastBroadcastMillis = millis();
             }

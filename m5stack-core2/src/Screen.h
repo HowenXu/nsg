@@ -38,6 +38,9 @@ class Screen {
     void drawString(const char* buffer, float textSize, uint32_t fgRGB, uint32_t bgRGB, textdatum_t datum, int32_t x, int32_t y);
     void drawStringMiddleCenter(const char* buffer, float textSize, uint32_t fgRGB, uint32_t bgRGB, int32_t y);
 
+    // draw string in CP437 mode instead of UTF8
+    void drawStringCP437(const char* buffer, float textSize, uint32_t fgRGB, uint32_t bgRGB, textdatum_t datum, int32_t x, int32_t y);
+
     void drawStringAboveBtnA(const char* buffer, float textSize, uint32_t fgRGB, uint32_t bgRGB);
     void drawStringAboveBtnB(const char* buffer, float textSize, uint32_t fgRGB, uint32_t bgRGB);
     void drawStringAboveBtnC(const char* buffer, float textSize, uint32_t fgRGB, uint32_t bgRGB);

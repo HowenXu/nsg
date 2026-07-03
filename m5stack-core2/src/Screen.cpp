@@ -124,6 +124,8 @@ void Screen::drawString(const char* buffer, float textSize, uint32_t fgRGB, uint
     auto textStyle = M5.Display.getTextStyle();
     textStyle.fore_rgb888 = fgRGB;
     textStyle.back_rgb888 = bgRGB;
+    textStyle.utf8 = true;
+    textStyle.cp437 = false;
     M5.Display.setTextStyle(textStyle);
     M5.Display.setTextDatum(datum);
     M5.Display.drawString(buffer, x, y);
@@ -131,6 +133,18 @@ void Screen::drawString(const char* buffer, float textSize, uint32_t fgRGB, uint
 
 void Screen::drawStringMiddleCenter(const char* buffer, float textSize, uint32_t fgRGB, uint32_t bgRGB, int32_t y) {
     drawString(buffer, textSize, fgRGB, bgRGB, middle_center, width() / 2, y);
+}
+
+void Screen::drawStringCP437(const char* buffer, float textSize, uint32_t fgRGB, uint32_t bgRGB, textdatum_t datum, int32_t x, int32_t y) {
+    M5.Display.setTextSize(textSize);
+    auto textStyle = M5.Display.getTextStyle();
+    textStyle.fore_rgb888 = fgRGB;
+    textStyle.back_rgb888 = bgRGB;
+    textStyle.utf8 = false;
+    textStyle.cp437 = true;
+    M5.Display.setTextStyle(textStyle);
+    M5.Display.setTextDatum(datum);
+    M5.Display.drawString(buffer, x, y);
 }
 
 void Screen::drawStringAboveBtnA(const char* buffer, float textSize, uint32_t fgRGB, uint32_t bgRGB) {
