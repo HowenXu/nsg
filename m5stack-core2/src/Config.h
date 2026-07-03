@@ -38,10 +38,6 @@ void addToSavedCameras(const SavedCameraInfo& cameraInfo);
  */
 void reconcileSavedCamerasWithBondList();
 
-void setTzOffsetHours(const int8_t value);
-
-int8_t getTzOffsetHours();
-
 }  // namespace Config
 
 #endif  // CONFIG_H

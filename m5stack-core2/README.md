@@ -8,7 +8,7 @@
 ## Software approach
 
 - Use PlatformIO with the Arduino framework and M5Unified.
-- Keep the program in a single `loop()` with a state machine; FreeRTOS is not needed for the first version.
+- The core-1 `loop()` only processes GNSS UART + RTC time-sync and draws the screen. All application-level BLE work (scan-queue handling, (re)connect/handshake, TIME/GEO broadcast) runs in a dedicated FreeRTOS task pinned to core 0 (`BleWorker`), so a (re)connect — which can block for up to 45s — never freezes the UI.
 - Drain the GPS serial buffer at the start of every loop so no NMEA data is missed.
 
 Setup:
@@ -24,10 +24,14 @@ Setup Normal:
 + Start BLE scan, set handler to filter device and check device in manufacture data, put device address to somewhere
 + Setup GPS, set GPS fix = false
 
-Loop:
+Loop (core 1):
 + Process GPS output, save GPS location and fix, update RTC
++ Draw status screen
++ Push GNSS/RTC snapshot to the BLE worker
+
+BLE worker task (core 0):
 + Scan for pending device, do handshake for each one of them
-+ For each connected device, check timer and send GPS payload (every minute or 30s?)
++ For each connected device, check timer and send GPS payload (every 30s)
 + If got 0x80 or other error from camera, disconnect
 
 Structure:

@@ -187,26 +187,3 @@ void Config::reconcileSavedCamerasWithBondList() {
     nvs.putString("savedCameras", json.c_str());
     nvs.end();
 }
-
-void Config::setTzOffsetHours(const int8_t value) {
-    Preferences nvs;
-    if (!nvs.begin("nsg", false)) {
-        NSG_LOG_FATAL("Config::setTzOffsetHours", "Failed to open NVS");
-    }
-
-    if (!nvs.putChar("tzOffsetHours", value)) {
-        NSG_LOG_FATAL("Config::setTzOffsetHours", "Failed to save tzOffsetHours to NVS");
-    }
-    nvs.end();
-}
-
-int8_t Config::getTzOffsetHours() {
-    Preferences nvs;
-    if (!nvs.begin("nsg", false)) {
-        NSG_LOG_FATAL("Config::setTzOffsetHours", "Failed to open NVS");
-    }
-    // default to UTC+8
-    auto result = nvs.getChar("tzOffsetHours", 8);
-    nvs.end();
-    return result;
-}

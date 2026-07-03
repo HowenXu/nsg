@@ -4,14 +4,8 @@
 #include <HardwareSerial.h>
 #include <MicroNMEA.h>
 
-#include <memory>
-
-#include "../common/NikonBLEScanner.h"
+#include "BleWorker.h"
 #include "BootMode.h"
-#include "ConnectedCamera.h"
-#include "Esp32RandomGenerator.h"
-#include "GeoMessage.h"
-#include "TimeMessage.h"
 
 #ifndef UBLOX_GNSS_RX_PIN
 #define UBLOX_GNSS_RX_PIN 13
@@ -27,10 +21,6 @@
 
 #ifndef UBLOX_GNSS_FALLBACK_BAUD_RATE
 #define UBLOX_GNSS_FALLBACK_BAUD_RATE 38400
-#endif
-
-#ifndef NIKON_BLE_UPDATE_INTERVAL_MS
-#define NIKON_BLE_UPDATE_INTERVAL_MS 30000
 #endif
 
 #ifndef GNSS_TIME_SYNC_INTERVAL_MS
@@ -50,18 +40,16 @@ class NormalMode : public BootMode {
     void loop() override;
 
    private:
-    Esp32RandomGenerator rnd;
-    std::unique_ptr<NikonBLEScanner> scanner;
-    std::vector<ConnectedCamera> connectedCameras;
+    // Owns all BLE work on a dedicated core-0 task; the core-1 loop only feeds
+    // it GNSS/RTC state and reads back BLE status for the screen.
+    BleWorker bleWorker;
+
     // use serial 2, RX on GPIO 13 and TX on GPIO 14
     HardwareSerial gnss = {2};
     char nmeaBuffer[128];
     MicroNMEA nmea = {nmeaBuffer, sizeof(nmeaBuffer)};
     uint32_t nmeaLastSync = 0;
 
-    void updateTimeMessageWithRTC(TimeMessage& message);
-    GeoMessage generateGeoMessage(double lat, double lon, int32_t altitude, uint8_t satellites, uint8_t valid);
-    int countActiveBLEConnections() const;
     bool isRTCValid();
     bool nearBaudRate(HardwareSerial& serial, uint32_t targetBaudRate);
 };

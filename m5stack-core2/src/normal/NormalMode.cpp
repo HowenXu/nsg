@@ -2,30 +2,18 @@
 
 #include <M5Unified.h>
 
-#include "../common/NikonBLEClient.h"
-#include "../common/NikonBLEScanner.h"
 #include "Config.h"
 #include "Logging.h"
 #include "Screen.h"
 #include "UBlox.h"
 
-NormalMode::NormalMode() : connectedCameras() {}
+NormalMode::NormalMode() {}
 
-NormalMode::~NormalMode() {
-    if (scanner) {
-        scanner->stopScanning();
-    }
-}
+NormalMode::~NormalMode() { bleWorker.stop(); }
 
 void NormalMode::setup() {
+    // reconcile the bond list with saved cameras before the BLE worker loads them
     Config::reconcileSavedCamerasWithBondList();
-
-    auto savedCameras = Config::getSavedCameras();
-    connectedCameras.reserve(savedCameras.size());
-    for (const auto& saved : savedCameras) {
-        NSG_LOG_INFO("NormalMode::setup", "Loadding saved camera %s", saved.bleName);
-        connectedCameras.emplace_back(saved);
-    }
 
     // init GNSS
     gnss.setRxBufferSize(GNSS_RX_BUFFER_SIZE);
@@ -61,9 +49,9 @@ void NormalMode::setup() {
         }
     }
 
-    scanner.reset(new NikonBLEScanner(NikonBLEScannerMode::PAIRED));
-    if (!scanner->startScanning()) {
-        NSG_LOG_FATAL("NormalSetup", "failed to start BLE scanning");
+    // start the BLE worker on core 0 (loads saved cameras + scanner internally)
+    if (!bleWorker.start()) {
+        NSG_LOG_FATAL("NormalMode::setup", "failed to start BLE worker");
     }
 }
 
@@ -74,46 +62,6 @@ void NormalMode::loop() {
         if (nmea.process(gnss.read())) {
             nmeaGotNewCommand = true;
         }
-    }
-    // process BLE scan queue
-    ScannedCamera scanned;
-    bool scanStopped = false;
-    while (xQueueReceive(scanner->scanResultQueue, &scanned, (TickType_t)0)) {
-        // search for connected, if it is advertising, then it's disconnected
-        // we need to (re)initialize the BLE client
-        for (auto& item : connectedCameras) {
-            if (item.info.bleName == scanned.name && item.info.device == scanned.device) {
-                if (item.pClient && !item.pClient->isConnected()) {
-                    // disconnected, kill current client and restart
-                    item.pClient->disconnect();
-                    item.pClient.reset();
-                }
-                if (!item.pClient) {
-                    if (countActiveBLEConnections() >= CONFIG_BTDM_CTRL_BLE_MAX_CONN) {
-                        NSG_LOG_WARN("NormalLoop", "Max BLE connections (%d) reached, skipping %s", CONFIG_BTDM_CTRL_BLE_MAX_CONN,
-                                     item.info.bleName.c_str());
-                        continue;
-                    }
-                    item.pClient.reset(new NikonBLEClient(rnd, item.info.device, item.info.nonce));
-                    if (!scanStopped) {
-                        // stop scanning to free up the attenna
-                        scanner->stopScanning();
-                        scanStopped = true;
-                    }
-                    auto bleAddr = BLEAddress(scanned.addr);
-                    // TODO: handshake is blocking, will it hurt anything?
-                    if (!item.pClient->doHandshake(bleAddr, scanned.addrType)) {
-                        NSG_LOG_ERROR("NormalLoop", "Failed to reconnect to %s due to handshake failure", bleAddr.toString().c_str());
-                        // clean up stale client asap
-                        item.pClient.reset();
-                    } else {
-                        NSG_LOG_INFO("NormalLoop", "BLE connected to %s", bleAddr.toString().c_str());
-                        item.lastBroadcastMillis = 0;
-                    }
-                }
-            }
-        }
-        yield();
     }
 
     uint8_t gnssValid = nmea.isValid() ? 1 : 0;
@@ -130,6 +78,7 @@ void NormalMode::loop() {
     uint8_t satellites = nmea.getNumSatellites();
 
     if (screen.shouldDraw()) {
+        auto bleStatus = bleWorker.getBleStatusSnapshot();
         screen.drawStringMiddleCenter("NSG", 3, 0xFFFFFF, 0x000000, screen.topBarHeight() + 20);
         // light gray if fixed, otherwise dark gray
         uint32_t textColor = gnssValid ? 0xd3d3d3 : 0x404040;
@@ -164,11 +113,11 @@ void NormalMode::loop() {
         screen.drawString(buffer, 2, textColor, 0x000000,  //
                           middle_left, textX, screen.topBarHeight() + 150);
         // BLE connection
-        snprintf(buffer, sizeof(buffer), "BLE: %d / %d      ", countActiveBLEConnections(), CONFIG_BTDM_CTRL_BLE_MAX_CONN);
+        snprintf(buffer, sizeof(buffer), "BLE: %d / %d      ", bleStatus.activeConnections, CONFIG_BTDM_CTRL_BLE_MAX_CONN);
         screen.drawString(buffer, 2, 0xd3d3d3, 0x000000,  //
                           middle_left, textX, screen.topBarHeight() + 175);
         // Paired devices
-        snprintf(buffer, sizeof(buffer), "CAM: %d / %d      ", connectedCameras.size(), CONFIG_BT_SMP_MAX_BONDS);
+        snprintf(buffer, sizeof(buffer), "CAM: %d / %d      ", bleStatus.pairedCount, CONFIG_BT_SMP_MAX_BONDS);
         screen.drawString(buffer, 2, 0xd3d3d3, 0x000000,  //
                           middle_left, textX, screen.topBarHeight() + 200);
     }
@@ -186,94 +135,25 @@ void NormalMode::loop() {
             // ensure we have valid time after fix, maybe RMC sentence will come after location fixed
             if (year >= 2026) {
                 // we don't know weekday from GNSS, set it to 0
-                M5.Rtc.setDateTime({{(int16_t)year, (int8_t)month, (int8_t)day, 0}, {(int8_t)hour, (int8_t)minute, (int8_t)second}});
+                // hold the BLE worker's lock so it cannot read the RTC mid-write
+                {
+                    BleWorker::Lock lk(bleWorker);
+                    M5.Rtc.setDateTime({{(int16_t)year, (int8_t)month, (int8_t)day, 0}, {(int8_t)hour, (int8_t)minute, (int8_t)second}});
+                }
                 NSG_LOG_INFO("NormalMode::loop", "Synced time from GNSS: %04d/%02d/%02d %02d:%02d:%02d", year, month, day, hour, minute, second);
                 nmeaLastSync = millis();
             }
         }
-
-        // only send payload when RTC is valid
-        // since GEO payload has time info, and camera will check the time
-        // if the time in GEO payload drift from camera's clock, it reject the payload
-        if (isRTCValid()) {
-            TimeMessage timeMessage(0, 0, 0, 0, 0, 0, 0, 0, 0);
-            // loop through cameras and send payload
-            for (auto& item : connectedCameras) {
-                if (millis() - item.lastBroadcastMillis < NIKON_BLE_UPDATE_INTERVAL_MS) continue;
-                if (!item.pClient) continue;
-                if (!item.pClient->isConnected()) continue;
-
-                // stop scanning to free up the attenna
-                if (!scanStopped) {
-                    scanner->stopScanning();
-                    scanStopped = true;
-                }
-                // sending TIME payload
-                updateTimeMessageWithRTC(timeMessage);
-                NSG_LOG_INFO("NormalLoop", "Sending TIME payload to %s...", item.info.bleName.c_str());
-                if (!item.pClient->sendTimePayload(timeMessage)) {
-                    NSG_LOG_WARN("NormalLoop", "Failed to send TIME payload to %s", item.info.bleName.c_str());
-                    item.pClient->disconnect();
-                }
-                // sending GEO payload, skip if we already sent a invalid GEO payload
-                // otherwise, if we kept sending invalid GEO payload, camera will reject
-                if (item.lastGeoValid || gnssValid) {
-                    NSG_LOG_INFO("NormalLoop", "Sending GEO payload to %s...", item.info.bleName.c_str());
-                    auto geoMessage = generateGeoMessage(lat, lon, altitude, satellites, gnssValid);
-                    if (!item.pClient->sendGeoPayload(geoMessage)) {
-                        // camera rejected the message, set last geo invalid so we won't send invalid GEO again on reconnect
-                        item.lastGeoValid = false;
-                        NSG_LOG_WARN("NormalLoop", "Failed to send GEO payload to %s", item.info.bleName.c_str());
-                        item.pClient->disconnect();
-                    } else {
-                        item.lastGeoValid = gnssValid;
-                    }
-                }
-                // update broadcast time
-                item.lastBroadcastMillis = millis();
-            }
-        } else {
-            NSG_LOG_WARN("NormalMode::loop", "RTC invalid, skip sending BLE payload");
+        bool rtcValid = false;
+        // hold the BLE worker's lock so it cannot read the RTC mid-write
+        {
+            BleWorker::Lock lk(bleWorker);
+            rtcValid = isRTCValid();
         }
+
+        // push current GNSS/RTC state to the BLE worker for payload building
+        bleWorker.setGnssSnapshot({lat, lon, altitude, satellites, gnssValid, rtcValid});
     }
-
-    // if scan stopped, resume scan
-    if (scanStopped) {
-        // restart scanning
-        if (!scanner->startScanning()) {
-            NSG_LOG_FATAL("NormalSetup", "failed to start BLE scanning");
-        }
-    }
-}
-
-void NormalMode::updateTimeMessageWithRTC(TimeMessage& message) {
-    auto datetime = M5.Rtc.getDateTime();
-    // here is the UTC time
-    message.year = datetime.date.year;
-    message.month = datetime.date.month;
-    message.day = datetime.date.date;
-    message.hour = datetime.time.hours;
-    message.minute = datetime.time.minutes;
-    message.second = datetime.time.seconds;
-    message.dstOffset = 0;
-    message.tzOffsetHours = Config::getTzOffsetHours();
-    message.tzOffsetMinutes = 0;
-}
-
-GeoMessage NormalMode::generateGeoMessage(double lat, double lon, int32_t altitude, uint8_t satellites, uint8_t valid) {
-    auto datetime = M5.Rtc.getDateTime();
-    return GeoMessage::fromDecimal(lat, lon, altitude, satellites, datetime.date.year, datetime.date.month, datetime.date.date, datetime.time.hours,
-                                   datetime.time.minutes, datetime.time.seconds, 0, valid);
-}
-
-int NormalMode::countActiveBLEConnections() const {
-    int count = 0;
-    for (const auto& item : connectedCameras) {
-        if (item.pClient && item.pClient->isConnected()) {
-            count++;
-        }
-    }
-    return count;
 }
 
 bool NormalMode::isRTCValid() {
