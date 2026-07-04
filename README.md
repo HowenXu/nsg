@@ -33,3 +33,13 @@ The current plan is to use an M5Stack Core2 as the dedicated hardware. The origi
 Moved from PlatformIO to [pioarduino](https://github.com/pioarduino/platform-espressif32) because platformio sucks. They stay at old version of arduino-esp32. The pioarduino fixed this.
 
 The code is pretty much finished, it can pair new cameras, talk to a UBlox GNSS module, parse NMEA and send TIME and GEO payload over BLE.
+
+## Known Camera Quirks
+
+### LCD coordinate display
+
+The Nikon camera LCD shows GPS coordinates in **degrees + decimal minutes**, the same format this project's M5Stack screen uses. However, the camera's rendering of the fractional minutes is buggy in some cases.
+
+For example, a fractional minute of `51.002'` is shown on the camera LCD as `51.2'`, not `51.002'`. By contrast, `51.688'` is shown correctly as `51.688'`. The failure is not consistent — it appears to depend on the digits of the fractional part.
+
+The value stored in the photo's EXIF tag is correct in both cases (verified with `exiftool`), so the geotagging is accurate. This is a display-only bug in the Nikon camera firmware, not a bug in this project's encoding. This is confirmed on both Z50II and Z8.
