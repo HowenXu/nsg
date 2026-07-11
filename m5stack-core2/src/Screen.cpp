@@ -36,7 +36,7 @@ void Screen::loopBeforeApp() {
     bool hasTouch = M5.Touch.getCount() > 0;
     bool hasBtn = M5.BtnA.isPressed() || M5.BtnB.isPressed() || M5.BtnC.isPressed();
 
-    if (!isOn() && (hasTouch || hasBtn)) {
+    if (!isOn() && hasBtn) {
         turnOnBacklight();
     }
     if (touchSuppressed) {  // release suppress if no touch
@@ -44,8 +44,8 @@ void Screen::loopBeforeApp() {
             touchSuppressed = false;
         }
     }
-    if (hasTouch || hasBtn) {
-        // mark active if user has touch or button input
+    if (isOn() && (hasTouch || hasBtn)) {
+        // mark active if screen is on and user has touch or button input
         markActive();
     }
     // update frame timer, target FPS: 20, frame interval 50ms
