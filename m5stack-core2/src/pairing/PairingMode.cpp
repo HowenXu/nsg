@@ -263,13 +263,8 @@ void PairingMode::saveAndReboot() {
     screen.drawStringMiddleCenter("Saving camera...", 3, 0xd3d3d3, 0x000000, screen.height() / 2);
     const ScannedCamera& camera = cameraList[selectedCameraIdx];
     NSG_LOG_INFO("PairingMode::saveAndReboot", "Saving paired camera info...");
-    // Format classic BT address as "xx:xx:xx:xx:xx:xx" (matches BLEAddress::toString format)
-    const uint8_t* addr = classicBT->getClassicAddr();
-    char btAddrStr[18];
-    snprintf(btAddrStr, sizeof(btAddrStr), "%02x:%02x:%02x:%02x:%02x:%02x", addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]);
-    SavedCameraInfo cameraInfo(String(camera.name), pClient->getDevice(), pClient->getNonce(), String(btAddrStr));
+    SavedCameraInfo cameraInfo(String(camera.name), pClient->getDevice(), pClient->getNonce());
     Config::addToSavedCameras(cameraInfo);
-    Config::reconcileSavedCamerasWithBondList();
 
     // Clean up before reboot.
     classicBT.reset();

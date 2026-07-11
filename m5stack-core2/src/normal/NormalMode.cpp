@@ -12,9 +12,6 @@ NormalMode::NormalMode() {}
 NormalMode::~NormalMode() { bleWorker.stop(); }
 
 void NormalMode::setup() {
-    // reconcile the bond list with saved cameras before the BLE worker loads them
-    Config::reconcileSavedCamerasWithBondList();
-
     // init GNSS
     gnss.setRxBufferSize(GNSS_RX_BUFFER_SIZE);
     gnss.begin(UBLOX_GNSS_TARGET_BAUD_RATE, SERIAL_8N1, UBLOX_GNSS_RX_PIN, UBLOX_GNSS_TX_PIN);
@@ -35,8 +32,7 @@ void NormalMode::setup() {
             gnss.updateBaudRate(UBLOX_GNSS_FALLBACK_BAUD_RATE);
         } else {
             // already on default baud rate but still not working
-            M5.Speaker.tone(440, 10000);
-            NSG_LOG_FATAL("NormalMode::setup", "Failed to config UBlox GNSS...");
+            esp_restart();
         }
     }
     // update baud rate to target
@@ -45,7 +41,7 @@ void NormalMode::setup() {
             gnss.updateBaudRate(UBLOX_GNSS_TARGET_BAUD_RATE);
             NSG_LOG_DEBUG("NormalMode::setup", "Upgraded GNSS baud rate to %d", UBLOX_GNSS_TARGET_BAUD_RATE);
         } else {
-            NSG_LOG_FATAL("NormalMode::setup", "Failed to set GNSS baud rate to %d", UBLOX_GNSS_TARGET_BAUD_RATE);
+            esp_restart();
         }
     }
 
@@ -117,7 +113,7 @@ void NormalMode::loop() {
         screen.drawString(buffer, 2, 0xd3d3d3, 0x000000,  //
                           middle_left, textX, screen.topBarHeight() + 175);
         // Paired devices
-        snprintf(buffer, sizeof(buffer), "CAM: %d / %d      ", bleStatus.pairedCount, CONFIG_BT_SMP_MAX_BONDS);
+        snprintf(buffer, sizeof(buffer), "CAM: %d paired      ", bleStatus.pairedCount);
         screen.drawString(buffer, 2, 0xd3d3d3, 0x000000,  //
                           middle_left, textX, screen.topBarHeight() + 200);
     }

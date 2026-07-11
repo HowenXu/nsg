@@ -9,12 +9,10 @@
 
 class SavedCameraInfo {
    public:
-    SavedCameraInfo(String bleName, uint32_t device, uint32_t nonce, String btAddr);
+    SavedCameraInfo(String bleName, uint32_t device, uint32_t nonce);
     String bleName;
     uint32_t device;
     uint32_t nonce;
-    // classic BT addr for checking the bond
-    String btAddr;
     void addToJsonArray(JsonDocument& parent) const;
 };
 
@@ -30,13 +28,6 @@ uint32_t getOrGenerateId(RandomGenerator& randomGenerator);
 std::vector<SavedCameraInfo> getSavedCameras();
 
 void addToSavedCameras(const SavedCameraInfo& cameraInfo);
-
-/**
- * Remove saved cameras whose classic BT bond no longer exists in the BT
- * stack's security database. Must be called after the Bluedroid stack is
- * enabled (i.e. after BLEDevice::init()).
- */
-void reconcileSavedCamerasWithBondList();
 
 }  // namespace Config
 

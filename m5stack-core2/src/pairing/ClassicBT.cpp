@@ -127,5 +127,3 @@ bool ClassicBT::isPairingDone(const uint32_t timeoutMs) {
 }
 
 bool ClassicBT::isPairingSuccess() { return authSuccess; }
-
-const uint8_t* ClassicBT::getClassicAddr() const { return classicAddr; }

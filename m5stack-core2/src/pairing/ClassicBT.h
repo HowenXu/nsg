@@ -19,9 +19,6 @@ class ClassicBT {
     void confirmPairCode(bool accept);
     bool isPairingDone(const uint32_t timeoutMs);
     bool isPairingSuccess();
-    // return the classic BT address of the paired device.
-    // Only valid after a successful searchAndInitiatePair().
-    const uint8_t* getClassicAddr() const;
 
    private:
     BluetoothSerial serialBT;

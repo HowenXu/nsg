@@ -54,5 +54,6 @@ The device has two modes:
 
 ## Open tasks
 
-- Implement the pairing and reconnect state machines.
-- Test the first end-to-end connection with a Nikon Z camera.
+- Implement a serial based pairing mode: s -> show scanned result, number -> select a given camera, y/n -> confirm code or reject code
+- Add another target, which only has the ESP32 itself and GNSS model
+- Figure out how to fit multiple target in the same project?
