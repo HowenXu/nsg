@@ -1,8 +1,6 @@
 #include "BleWorker.h"
 
-#include <M5Unified.h>
-
-#include "../common/NikonBLEClient.h"
+#include "common/NikonBLEClient.h"
 #include "Config.h"
 #include "GeoMessage.h"
 #include "Logging.h"
@@ -12,23 +10,23 @@ namespace {
 
 // Fill a TIME message from an already-locked RTC read. The caller is
 // responsible for having read `dt` under the BleWorker mutex.
-void updateTimeMessageWithRTC(TimeMessage& message, const m5::rtc_datetime_t& dt) {
+void updateTimeMessageWithRTC(TimeMessage& message, const RtcSnapshot& dt) {
     // here is the UTC time
-    message.year = dt.date.year;
-    message.month = dt.date.month;
-    message.day = dt.date.date;
-    message.hour = dt.time.hours;
-    message.minute = dt.time.minutes;
-    message.second = dt.time.seconds;
+    message.year = dt.year;
+    message.month = dt.month;
+    message.day = dt.day;
+    message.hour = dt.hour;
+    message.minute = dt.minute;
+    message.second = dt.second;
     message.dstOffset = 0;
     message.tzOffsetHours = TZ_OFFSET_HOUR;
     message.tzOffsetMinutes = 0;
 }
 
-GeoMessage generateGeoMessage(const GnssSnapshot& snap, const m5::rtc_datetime_t& dt) {
+GeoMessage generateGeoMessage(const GnssSnapshot& snap, const RtcSnapshot& dt) {
     return GeoMessage::fromDecimal(snap.lat, snap.lon, snap.altitudeMeters, snap.satellites,  //
-                                   dt.date.year, dt.date.month, dt.date.date,                 //
-                                   dt.time.hours, dt.time.minutes, dt.time.seconds, 0,        //
+                                   dt.year, dt.month, dt.day,                                 //
+                                   dt.hour, dt.minute, dt.second, 0,                          //
                                    snap.gnssValid);
 }
 
@@ -112,6 +110,13 @@ size_t BleWorker::countActiveBLEConnections() {
     return count;
 }
 
+bool BleWorker::isRTCValid() {
+    // hold the BLE worker's lock so it cannot read the RTC mid-write
+    Lock lk(*this);
+    auto datetime = Board::getRTC();
+    return datetime.year >= 2026;
+}
+
 void BleWorker::taskEntry(void* arg) {
     auto* self = static_cast<BleWorker*>(arg);
     self->taskLoop();
@@ -188,7 +193,7 @@ void BleWorker::taskLoop() {
 
         // only send payload when RTC is valid, since GEO payload has time info
         // and the camera will reject it if the time drifts from its own clock.
-        if (snap.rtcValid) {
+        if (isRTCValid()) {
             TimeMessage timeMessage(0, 0, 0, 0, 0, 0, 0, 0, 0);
             for (auto& item : connectedCameras) {
                 if (millis() - item.lastBroadcastMillis < NIKON_BLE_UPDATE_INTERVAL_MS) continue;
@@ -201,10 +206,10 @@ void BleWorker::taskLoop() {
                     scanStopped = true;
                 }
                 // sending TIME payload, first getting the latest time
-                m5::rtc_datetime_t dt{};
+                RtcSnapshot dt;
                 {
                     Lock lk(*this);
-                    dt = M5.Rtc.getDateTime();
+                    dt = Board::getRTC();
                 }
                 updateTimeMessageWithRTC(timeMessage, dt);
                 NSG_LOG_INFO("BleWorker", "Sending TIME payload to %s...", item.info.bleName.c_str());

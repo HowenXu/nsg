@@ -1,10 +1,8 @@
 #include "NormalMode.h"
 
-#include <M5Unified.h>
-
+#include "boards/Board.h"
 #include "Config.h"
 #include "Logging.h"
-#include "Screen.h"
 #include "UBlox.h"
 
 NormalMode::NormalMode() {}
@@ -18,6 +16,7 @@ void NormalMode::setup() {
 
     // send signal config with fallback baud rate
     NSG_LOG_INFO("NormalMode::setup", "Config UBlox GNSS...");
+    bool onFallbackBaudRate = false;
     while (true) {
         // drain rx buffer before send ublox command
         while (gnss.available()) gnss.read();
@@ -27,16 +26,17 @@ void NormalMode::setup() {
             break;
         }
         // still fail, try the fallback baud rate
-        if (nearBaudRate(gnss, UBLOX_GNSS_TARGET_BAUD_RATE)) {
+        if (!onFallbackBaudRate) {
             NSG_LOG_INFO("NormalMode::setup", "Change GNSS baud rate from %d to %d...", gnss.baudRate(), UBLOX_GNSS_FALLBACK_BAUD_RATE);
             gnss.updateBaudRate(UBLOX_GNSS_FALLBACK_BAUD_RATE);
+            onFallbackBaudRate = true;
         } else {
             // already on default baud rate but still not working
             esp_restart();
         }
     }
     // update baud rate to target
-    if (!nearBaudRate(gnss, UBLOX_GNSS_TARGET_BAUD_RATE)) {
+    if (onFallbackBaudRate) {
         if (UBlox::setBaudRate(gnss, UBLOX_GNSS_TARGET_BAUD_RATE)) {
             gnss.updateBaudRate(UBLOX_GNSS_TARGET_BAUD_RATE);
             NSG_LOG_DEBUG("NormalMode::setup", "Upgraded GNSS baud rate to %d", UBLOX_GNSS_TARGET_BAUD_RATE);
@@ -73,50 +73,9 @@ void NormalMode::loop() {
     altitude = altitude / 1000;
     uint8_t satellites = nmea.getNumSatellites();
 
-    if (screen.shouldDraw()) {
-        auto bleStatus = bleWorker.getBleStatusSnapshot();
-        screen.drawStringMiddleCenter("NSG", 3, 0xFFFFFF, 0x000000, screen.topBarHeight() + 20);
-        // light gray if fixed, otherwise dark gray
-        uint32_t textColor = gnssValid ? 0xd3d3d3 : 0x404040;
-        int32_t textX = 60;
+    GnssSnapshot gnssSnapshot{lat, lon, altitude, satellites, gnssValid};
 
-        char buffer[64];
-        // GNSS fix, cyan if fixed, otherwise yellow
-        // extra 2 space to cover INVALID with VALID
-        snprintf(buffer, sizeof(buffer), "FIX: %s  ", gnssValid ? "VALID" : "INVALID");
-        screen.drawString(buffer, 2, gnssValid ? 0x00FFFF : 0xFFFF00, 0x000000,  //
-                          middle_left, textX, screen.topBarHeight() + 50);
-        // latitude
-        auto latAbs = std::fabs(lat);
-        uint8_t latD = static_cast<uint8_t>(latAbs);
-        double latM = (latAbs - latD) * 60.0;
-        snprintf(buffer, sizeof(buffer), "LAT: %s %3d\xf8 %06.3f'   ", lat >= 0 ? "N" : "S", latD, latM);
-        screen.drawStringCP437(buffer, 2, textColor, 0x000000,  //
-                               middle_left, textX, screen.topBarHeight() + 75);
-        // longitude
-        auto lonAbs = std::fabs(lon);
-        uint8_t lonD = static_cast<uint8_t>(lonAbs);
-        double lonM = (lonAbs - lonD) * 60.0;
-        snprintf(buffer, sizeof(buffer), "LON: %s %3d\xf8 %06.3f'   ", lon >= 0 ? "E" : "W", lonD, lonM);
-        screen.drawStringCP437(buffer, 2, textColor, 0x000000,  //
-                               middle_left, textX, screen.topBarHeight() + 100);
-        // altitude, some extra space to cover digits change
-        snprintf(buffer, sizeof(buffer), "ALT: %s %d M      ", altitude >= 0 ? "+" : "-", altitude >= 0 ? altitude : -altitude);
-        screen.drawString(buffer, 2, textColor, 0x000000,  //
-                          middle_left, textX, screen.topBarHeight() + 125);
-        // satellites count
-        snprintf(buffer, sizeof(buffer), "SAT: %d      ", satellites);
-        screen.drawString(buffer, 2, textColor, 0x000000,  //
-                          middle_left, textX, screen.topBarHeight() + 150);
-        // BLE connection
-        snprintf(buffer, sizeof(buffer), "BLE: %d / %d      ", bleStatus.activeConnections, CONFIG_BTDM_CTRL_BLE_MAX_CONN);
-        screen.drawString(buffer, 2, 0xd3d3d3, 0x000000,  //
-                          middle_left, textX, screen.topBarHeight() + 175);
-        // Paired devices
-        snprintf(buffer, sizeof(buffer), "CAM: %d paired      ", bleStatus.pairedCount);
-        screen.drawString(buffer, 2, 0xd3d3d3, 0x000000,  //
-                          middle_left, textX, screen.topBarHeight() + 200);
-    }
+    Board::onNormalUpdateStatus(gnssSnapshot, bleWorker.getBleStatusSnapshot());
 
     // if we got update from GPS
     if (nmeaGotNewCommand) {
@@ -130,40 +89,17 @@ void NormalMode::loop() {
             uint8_t second = nmea.getSecond();
             // ensure we have valid time after fix, maybe RMC sentence will come after location fixed
             if (year >= 2026) {
-                // we don't know weekday from GNSS, set it to 0
                 // hold the BLE worker's lock so it cannot read the RTC mid-write
                 {
                     BleWorker::Lock lk(bleWorker);
-                    M5.Rtc.setDateTime({{(int16_t)year, (int8_t)month, (int8_t)day, 0}, {(int8_t)hour, (int8_t)minute, (int8_t)second}});
+                    Board::setRTC({year, month, day, hour, minute, second});
                 }
                 NSG_LOG_INFO("NormalMode::loop", "Synced time from GNSS: %04d/%02d/%02d %02d:%02d:%02d", year, month, day, hour, minute, second);
                 nmeaLastSync = millis();
             }
         }
-        bool rtcValid = false;
-        // hold the BLE worker's lock so it cannot read the RTC mid-write
-        {
-            BleWorker::Lock lk(bleWorker);
-            rtcValid = isRTCValid();
-        }
 
         // push current GNSS/RTC state to the BLE worker for payload building
-        bleWorker.setGnssSnapshot({lat, lon, altitude, satellites, gnssValid, rtcValid});
+        bleWorker.setGnssSnapshot(gnssSnapshot);
     }
-}
-
-bool NormalMode::isRTCValid() {
-    auto datetime = M5.Rtc.getDateTime();
-    return datetime.date.year >= 2026;
-}
-
-bool NormalMode::nearBaudRate(HardwareSerial& serial, uint32_t targetBaudRate) {
-    uint32_t currentBaudRate = serial.baudRate();
-    uint32_t diff = currentBaudRate > targetBaudRate ? currentBaudRate - targetBaudRate : targetBaudRate - currentBaudRate;
-    // note: APB clock is always 80MHz,
-    //   for 38400, hardware timer is set to 2080, so baud rate is 80MHz / 2080 = 38461.54 (38461)
-    //   for 115200, hw timer is set to 690, so baud rate is 80MHz / 690 = 115942
-    //   so we need to check if the diff is smaller than 2%
-    uint32_t gate = targetBaudRate / 50;
-    return diff <= gate;
 }

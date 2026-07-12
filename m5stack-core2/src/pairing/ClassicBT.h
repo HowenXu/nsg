@@ -22,7 +22,7 @@ class ClassicBT {
 
    private:
     BluetoothSerial serialBT;
-    uint32_t pairCode;
+    std::atomic_uint32_t pairCode;
     std::string targetName;
     // these bool flags are shared with callbacks
     std::atomic_bool pairCodeReady = false;

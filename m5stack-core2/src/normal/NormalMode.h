@@ -41,7 +41,7 @@ class NormalMode : public BootMode {
 
    private:
     // Owns all BLE work on a dedicated core-0 task; the core-1 loop only feeds
-    // it GNSS/RTC state and reads back BLE status for the screen.
+    // it GNSS/RTC state and reads back BLE status
     BleWorker bleWorker;
 
     // use serial 2, RX on GPIO 13 and TX on GPIO 14
@@ -49,9 +49,6 @@ class NormalMode : public BootMode {
     char nmeaBuffer[128];
     MicroNMEA nmea = {nmeaBuffer, sizeof(nmeaBuffer)};
     uint32_t nmeaLastSync = 0;
-
-    bool isRTCValid();
-    bool nearBaudRate(HardwareSerial& serial, uint32_t targetBaudRate);
 };
 
 #endif  // NORMAL_MODE_H

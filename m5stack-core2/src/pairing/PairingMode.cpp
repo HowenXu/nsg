@@ -1,13 +1,12 @@
 #include "PairingMode.h"
 
 #include <Arduino.h>
-#include <M5Unified.h>
 
 #include <cstring>
 
+#include "boards/Board.h"
 #include "Config.h"
 #include "Logging.h"
-#include "Screen.h"
 #include "Utils.h"
 
 PairingMode::PairingMode() : state(State::SCANNING), scanner(nullptr), pClient(nullptr), classicBT(nullptr), cameraList(), selectedCameraIdx(0) {}
@@ -37,7 +36,6 @@ void PairingMode::loop() {
     switch (state) {
         case State::SCANNING:
             handleScanResults();
-            handleScanningInput();
             break;
         case State::BLE_HANDSHAKE:
             doBLEHandshake();
@@ -59,10 +57,7 @@ void PairingMode::loop() {
             if (classicBT) classicBT.reset();
             if (pClient) pClient.reset();
             if (scanner) scanner.reset();
-            if (screen.shouldDraw()) {
-                screen.drawStringMiddleCenter("FAILED", 3, 0xd30000, 0x000000, screen.height() / 2 - 30);
-                screen.drawStringMiddleCenter("Please reset manually", 2, 0xd3d3d3, 0x000000, screen.height() / 2 + 60);
-            }
+            Board::onPairingFailed();
             delay(10);
             break;
     }
@@ -90,81 +85,29 @@ void PairingMode::handleScanResults() {
         yield();
     }
 
-    if (screen.shouldDraw()) {
-        screen.drawStringMiddleCenter("Scanning", 3, 0xFFFFFF, 0x000000, screen.topBarHeight() + 25);
-
-        bool hasPrev = selectedCameraIdx > 0;
-        bool hasNext = !cameraList.empty() && selectedCameraIdx < cameraList.size() - 1;
-        size_t selectedPage = selectedCameraIdx / SCANNING_PAGE_SIZE;
-        // inclusive
-        size_t pageStartIndex = selectedPage * SCANNING_PAGE_SIZE;
-        // exclusive
-        size_t pageEndIndex = pageStartIndex + SCANNING_PAGE_SIZE;
-        if (pageEndIndex > cameraList.size()) {
-            pageEndIndex = cameraList.size();
-        }
-        for (size_t i = pageStartIndex; i < pageEndIndex; i++) {
-            auto& item = cameraList[i];
-            screen.drawStringMiddleCenter(item.name, 2,                                  //
-                                          i == selectedCameraIdx ? 0x00FFFF : 0xd3d3d3,  // cyan if select, light grey otherwise
-                                          0x000000,                                      //
-                                          screen.topBarHeight() + 60 + (i - pageStartIndex) * 25);
-        }
-
-        screen.drawStringAboveBtnA("Prev", 2,                      //
-                                   hasPrev ? 0xd3d3d3 : 0x000000,  // light grey if valid, otherwise black (hide)
-                                   0x000000);
-        screen.drawStringAboveBtnC("Next", 2,                      //
-                                   hasNext ? 0xd3d3d3 : 0x000000,  // light grey if valid, otherwise black (hide)
-                                   0x000000);
-        screen.drawStringAboveBtnB("Confirm", 2,                               //
-                                   !cameraList.empty() ? 0xd3d3d3 : 0x000000,  // light grey if valid, otherwise black (hide)
-                                   0x000000);
-    }
-}
-
-void PairingMode::handleScanningInput() {
-    // btnA -> prev page, btnB -> Confirm, btnC -> next page
-    if (screen.shouldHandleInput()) {
-        if (screen.btnB()->wasPressed() && selectedCameraIdx < cameraList.size()) {
-            M5.Speaker.tone(1000, 100);
-            scanner->stopScanning();
-            state = State::BLE_HANDSHAKE;
-            NSG_LOG_INFO("PairingMode::handleScanningInput", "selecting %s", cameraList[selectedCameraIdx].name);
-            screen.clearScreen();
-        } else if (screen.btnA()->wasPressed() && selectedCameraIdx > 0) {
-            M5.Speaker.tone(1000, 100);
-            selectedCameraIdx--;
-            if (selectedCameraIdx % SCANNING_PAGE_SIZE == SCANNING_PAGE_SIZE - 1) {
-                screen.clearScreen();
-            }
-        } else if (screen.btnC()->wasPressed() && !cameraList.empty() && selectedCameraIdx < cameraList.size() - 1) {
-            M5.Speaker.tone(1000, 100);
-            selectedCameraIdx++;
-            if (selectedCameraIdx % SCANNING_PAGE_SIZE == 0) {
-                screen.clearScreen();
-            }
-        }
-    }
+    Board::onPairingScanning(cameraList, selectedCameraIdx, [this]() {
+        scanner->stopScanning();
+        state = State::BLE_HANDSHAKE;
+        NSG_LOG_INFO("PairingMode::handleScanningInput", "selecting %s", cameraList[selectedCameraIdx].name);
+    });
 }
 
 void PairingMode::doBLEHandshake() {
     const ScannedCamera& camera = cameraList[selectedCameraIdx];
     const BLEAddress cameraAddr(const_cast<uint8_t*>(camera.addr), camera.addrType);
 
-    // draw it anyway because handshake is blocking
-    screen.drawStringMiddleCenter("Handshaking...", 3, 0xFFFFFF, 0x000000, screen.height() / 2);
+    Board::onPairingStartBleHandshake(camera);
 
     // Perform BLE handshake.
     pClient.reset(new NikonBLEClient(rnd));
     if (!pClient->doHandshake(cameraAddr, camera.addrType)) {
         state = State::FAIL;
         NSG_LOG_ERROR("PairingMode::doBLEHandshake", "BLE Handshake failed");
-        screen.clearScreen();
+        Board::onPairingBleHandshakeFailed(camera);
     } else {
         state = State::PAIRING;
         NSG_LOG_INFO("PairingMode::doBLEHandshake", "BLE Handshake success");
-        screen.clearScreen();
+        Board::onPairingBleHandshakeSuccess(camera);
     }
     NSG_LOG_INFO("PairingMode::doBLEHandshake", "Disconnecting BLE connection");
     pClient->disconnect();
@@ -174,8 +117,7 @@ void PairingMode::startPairingFlow() {
     const ScannedCamera& camera = cameraList[selectedCameraIdx];
     const std::string cameraName(camera.name);
 
-    // draw it anyway because search and bonding is blocking
-    screen.drawStringMiddleCenter("Pairing...", 3, 0xFFFFFF, 0x000000, screen.height() / 2);
+    Board::onPairingStartBtPairingInit(camera);
 
     // Start Classic Bluetooth pairing.
     classicBT.reset(new ClassicBT(cameraName));
@@ -183,87 +125,59 @@ void PairingMode::startPairingFlow() {
     if (!classicBT->searchAndInitiatePair(NIKON_BT_SEARCH_TIME_MS)) {
         state = State::FAIL;
         NSG_LOG_ERROR("PairingMode::startPairingFlow", "Failed to search and initiate pairing");
-        screen.clearScreen();
+        Board::onPairingBtPairingInitFailed(camera);
     } else {
         state = State::SHOW_CODE;
         NSG_LOG_INFO("PairingMode::startPairingFlow", "Initiated pairing");
-        screen.clearScreen();
+        Board::onPairingBtPairingInitSuccess(camera);
     }
 }
 
 void PairingMode::showCodeAndWaitConfirm() {
-    if (screen.shouldDraw()) {
-        screen.drawStringMiddleCenter("Confirm code", 3, 0xFFFFFF, 0x000000, screen.height() / 2 - 50);
-    }
-
-    if (!classicBT->isPairCodeReady()) {
-        delay(100);
-        return;
-    }
-    const uint32_t code = classicBT->getPairCode();
-
-    if (screen.shouldDraw()) {
-        char buffer[10];
-        snprintf(buffer, sizeof(buffer), "%06u", code);
-        screen.drawStringMiddleCenter(buffer, 4, 0xFFFFFF, 0x000000, screen.height() / 2);
-        screen.drawStringAboveBtnA("Confirm", 2, 0x00d300, 0x000000);
-        screen.drawStringAboveBtnC("Reject", 2, 0xd30000, 0x000000);
-    }
-
-    if (screen.shouldHandleInput()) {
-        if (screen.btnA()->wasPressed()) {
-            M5.Speaker.tone(1000, 100);
-            classicBT->confirmPairCode(true);
+    Board::onPairingCodeConfirm(classicBT->isPairCodeReady(), classicBT->getPairCode(), [this](bool result) {
+        classicBT->confirmPairCode(result);
+        if (result) {
             timeAfterPairSuccess = 0;
             state = State::CODE_CONFIRM;
-            screen.clearScreen();
-        } else if (screen.btnC()->wasPressed()) {
-            M5.Speaker.tone(1000, 100);
-            classicBT->confirmPairCode(false);
+        } else {
             state = State::FAIL;
-            screen.clearScreen();
         }
-    }
+    });
 }
 
 void PairingMode::waitPairingResult() {
-    if (screen.shouldDraw()) {
-        screen.drawStringMiddleCenter("Connecting...", 3, 0xd3d3d3, 0x000000, screen.height() / 2);
-    }
-    if (!classicBT->isPairingDone(NIKON_BT_PAIR_TIMEOUT_MS)) {
-        // pairing not done/timeout, keep waiting
-        delay(50);
-        return;
-    }
-    // pair done, or timeout
-    if (classicBT->isPairingSuccess()) {  // pairing success
-        if (timeAfterPairSuccess == 0) {
-            // set time and start waiting
-            timeAfterPairSuccess = millis();
-            NSG_LOG_INFO("PairingMode::waitPairingResult", "Waiting %d ms for camera to make connection...", NIKON_BT_AFTER_PAIR_TIME_MS);
+    if (classicBT->isPairingDone(NIKON_BT_PAIR_TIMEOUT_MS)) {  // pair done, or timeout
+        const bool isPairingSuccess = classicBT->isPairingSuccess();
+        if (isPairingSuccess) {  // pairing success
+            if (timeAfterPairSuccess == 0) {
+                // set time and start waiting
+                timeAfterPairSuccess = millis();
+                NSG_LOG_INFO("PairingMode::waitPairingResult", "Waiting %d ms for camera to make connection...", NIKON_BT_AFTER_PAIR_TIME_MS);
+            }
+            // wait extra time for camera to make the connection
+            if (millis() - timeAfterPairSuccess < NIKON_BT_AFTER_PAIR_TIME_MS) {
+                Board::onPairingWaitBtResult(true, isPairingSuccess, false);
+                return;  // keep waiting
+            } else {
+                NSG_LOG_INFO("PairingMode::waitPairingResult", "Classic BT bond established");
+                state = State::SUCCESS;
+                Board::onPairingWaitBtResult(true, isPairingSuccess, true);
+            }
+        } else {  // pairing not success
+            state = State::FAIL;
+            NSG_LOG_ERROR("PairingMode::waitPairingResult", "Pairing failed");
+            Board::onPairingWaitBtResult(true, isPairingSuccess, true);
         }
-        // wait extra time for camera to make the connection
-        if (millis() - timeAfterPairSuccess < NIKON_BT_AFTER_PAIR_TIME_MS) {
-            delay(50);
-            return;  // keep waiting
-        } else {
-            NSG_LOG_INFO("PairingMode::waitPairingResult", "Classic BT bond established");
-            state = State::SUCCESS;
-            screen.clearScreen();
-        }
-    } else {  // pairing not success
-        state = State::FAIL;
-        NSG_LOG_ERROR("PairingMode::waitPairingResult", "Pairing failed");
-        screen.clearScreen();
+    } else {  // pairing in progress
+        Board::onPairingWaitBtResult(false, false, false);
     }
 }
 
 void PairingMode::saveAndReboot() {
-    // draw it anyway
-    screen.drawStringMiddleCenter("Saving camera...", 3, 0xd3d3d3, 0x000000, screen.height() / 2);
     const ScannedCamera& camera = cameraList[selectedCameraIdx];
     NSG_LOG_INFO("PairingMode::saveAndReboot", "Saving paired camera info...");
     SavedCameraInfo cameraInfo(String(camera.name), pClient->getDevice(), pClient->getNonce());
+    Board::onPairingFinished(cameraInfo);
     Config::addToSavedCameras(cameraInfo);
 
     // Clean up before reboot.

@@ -4,3 +4,5 @@
 .dummy
 managed_components
 sdkconfig.*
+CMakeLists.txt
+dependencies.lock

@@ -3,7 +3,7 @@
 
 #include <memory>
 
-#include "../common/NikonBLEClient.h"
+#include "common/NikonBLEClient.h"
 #include "Config.h"
 
 class ConnectedCamera {

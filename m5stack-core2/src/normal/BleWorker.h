@@ -10,7 +10,8 @@
 #include <memory>
 #include <vector>
 
-#include "../common/NikonBLEScanner.h"
+#include "common/NikonBLEScanner.h"
+#include "boards/Board.h"
 #include "ConnectedCamera.h"
 #include "Esp32RandomGenerator.h"
 
@@ -23,22 +24,6 @@
 #define TZ_OFFSET_HOUR 8
 #endif
 
-// GNSS/RTC state produced on core 1, consumed by the BLE worker on core 0.
-struct GnssSnapshot {
-    double lat = 0;
-    double lon = 0;
-    int32_t altitudeMeters = 0;
-    uint8_t satellites = 0;
-    uint8_t gnssValid = 0;
-    bool rtcValid = false;
-};
-
-// BLE status produced by the worker on core 0, consumed by the UI on core 1.
-struct BleStatusSnapshot {
-    int activeConnections = 0;
-    int pairedCount = 0;
-};
-
 // Owns all application-level BLE work and runs it on a dedicated core-0 task,
 // offloading the core-1 loop so the screen keeps drawing during (re)connects.
 //
@@ -47,7 +32,7 @@ struct BleStatusSnapshot {
 //  - `GnssSnapshot` / `BleStatusSnapshot` are read/written under the mutex.
 //  - RTC reads the worker performs for payload building run under the same
 //    mutex as the snapshots, so they cannot race with the core-1 time-sync
-//    write (M5.Rtc.setDateTime).
+//    write (for example, M5.Rtc.setDateTime).
 class BleWorker {
    public:
     // 16 KB stack (4096 words of StackType_t), placed in internal RAM via
@@ -108,6 +93,7 @@ class BleWorker {
 
     // Worker-only helper.
     size_t countActiveBLEConnections();
+    bool isRTCValid();
 };
 
 #endif  // BLE_WORKER_H

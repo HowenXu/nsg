@@ -1,11 +1,6 @@
 #ifndef BOOT_MODE_H
 #define BOOT_MODE_H
 
-enum class BootModeEnum {
-    PAIRING,
-    NORMAL
-};
-
 class BootMode {
    public:
     virtual ~BootMode() = default;

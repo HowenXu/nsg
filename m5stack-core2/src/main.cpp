@@ -1,87 +1,27 @@
 #include <Arduino.h>
 #include <BLEDevice.h>
-#include <M5Unified.h>
 
+#include "boards/Board.h"
 #include "BootMode.h"
 #include "Config.h"
 #include "Esp32RandomGenerator.h"
 #include "Logging.h"
-#include "Screen.h"
 #include "Utils.h"
 #include "normal/NormalMode.h"
 #include "pairing/PairingMode.h"
-
-BootModeEnum detectBootMode() {
-    const uint32_t WAIT_MS = 6000;
-    const uint32_t THRESHOLD_MS = 1200;
-    const uint32_t REFRESH_MS = 30;
-
-    // draw text
-    screen.clearScreen();
-    screen.drawStringMiddleCenter("Holding Btn C to", 3, 0xFFFF00, 0x000000, screen.height() / 2 - 45);
-    screen.drawStringMiddleCenter("pair new device", 3, 0xFFFF00, 0x000000, screen.height() / 2 - 5);
-
-    uint32_t startMs = millis();
-    uint32_t touched = 0;
-
-    while (millis() - startMs < WAIT_MS) {
-        M5.update();
-        // check BtnC pressed and give feedback
-        // here we use M5.BtnC directly to avoid setup sequence issue
-        if (M5.BtnC.isPressed()) {
-            if (M5.BtnC.wasPressed()) {
-                // a short beep on detection to notify user the press has been registered
-                M5.Speaker.tone(1000, 100);
-            }
-            touched += REFRESH_MS;
-            if (touched >= THRESHOLD_MS) break;
-        } else {
-            touched = 0;
-        }
-
-        // show counter
-        uint32_t remaining = (WAIT_MS - (millis() - startMs)) / 1000;
-        auto autoBootStr = String("Auto normal in ") + remaining + "s";
-        screen.drawStringMiddleCenter(autoBootStr.c_str(), 2, 0xd3d3d3, 0x000000, screen.height() / 2 + 50);
-        delay(REFRESH_MS);
-    }
-
-    // clear screen
-    screen.clearScreen();
-    if (touched >= THRESHOLD_MS) {
-        NSG_LOG_INFO("detectBootMode", "Booting into pairing mode...");
-        return BootModeEnum::PAIRING;
-    } else {
-        NSG_LOG_INFO("detectBootMode", "Booting into normal mode...");
-        return BootModeEnum::NORMAL;
-    }
-}
 
 BootModeEnum bootModeType = BootModeEnum::NORMAL;
 NormalMode* normalMode = nullptr;
 PairingMode* pairingMode = nullptr;
 
 void setup() {
-    // set CPU to 160MHz to save power
-    setCpuFrequencyMhz(160);
+    Board::onMainSetupBeforeSerial();
+
     // enable default serial as monitor
     Serial.begin(115200);
     NSG_LOG_DEBUG("MainSetup", "Serial initialized");
-    // Initialize M5 for screen, etc.
-    M5.begin();
-    NSG_LOG_DEBUG("MainSetup", "M5 initialized");
 
-    if (!M5.Rtc.isEnabled()) {
-        NSG_LOG_FATAL("MainSetup", "RTC not found");
-    }
-
-    if (!M5.Rtc.begin()) {
-        NSG_LOG_FATAL("MainSetup", "failed to initialize RTC");
-    }
-    // init device
-    M5.Power.setLed(255);
-    M5.Speaker.setVolume(255);
-    M5.Display.setBrightness(255);
+    Board::onMainSetupAfterSerial();
 
     // init BLE stack (required by both boot modes)
     Esp32RandomGenerator rnd;
@@ -94,7 +34,7 @@ void setup() {
 
     // collect boot up mode
     NSG_LOG_DEBUG("MainSetup", "Detecting boot mode...");
-    bootModeType = detectBootMode();
+    bootModeType = Board::detectBootMode();
 
     switch (bootModeType) {
         case BootModeEnum::NORMAL:
@@ -111,15 +51,12 @@ void setup() {
             NSG_LOG_FATAL("MainSetup", "Unexpected boot type");
             break;
     }
-    // sync screen backlight status
-    screen.turnOnBacklight();
+
+    Board::onMainSetupEnd();
 }
 
 void loop() {
-    M5.update();
-
-    screen.loopBeforeApp();
-
+    Board::onMainLoopBeforeApp();
     switch (bootModeType) {
         case BootModeEnum::NORMAL:
             if (normalMode) {
@@ -141,6 +78,5 @@ void loop() {
             NSG_LOG_FATAL("MainLoop", "Unexpected boot type");
             break;
     }
-
-    screen.loopAfterApp();
+    Board::onMainLoopAfterApp();
 }

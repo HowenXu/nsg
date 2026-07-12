@@ -4,9 +4,9 @@
 #include <memory>
 #include <vector>
 
-#include "../common/NikonBLEClient.h"
-#include "../common/NikonBLEScanner.h"
-#include "../common/ScannedCamera.h"
+#include "common/NikonBLEClient.h"
+#include "common/NikonBLEScanner.h"
+#include "common/ScannedCamera.h"
 #include "BootMode.h"
 #include "ClassicBT.h"
 #include "Esp32RandomGenerator.h"
@@ -22,8 +22,6 @@
 #ifndef NIKON_BT_AFTER_PAIR_TIME_MS
 #define NIKON_BT_AFTER_PAIR_TIME_MS 6000
 #endif
-
-#define SCANNING_PAGE_SIZE 5
 
 class PairingMode : public BootMode {
    public:
@@ -47,8 +45,6 @@ class PairingMode : public BootMode {
     uint32_t timeAfterPairSuccess = 0;
 
     void handleScanResults();
-    void handleScanningInput();
-
     void doBLEHandshake();
     void startPairingFlow();
     void showCodeAndWaitConfirm();
