@@ -4,7 +4,7 @@
 
 Supported boards:
 - **M5Stack Core2 v1.1** with u-blox NEO-M10 GPS module — fully functional
-- **ESP32 WROOM 32E** with u-blox GNSS module — work in progress
+- **ESP32 WROOM 32E** with u-blox GNSS module — fully functional (serial-based pairing flow; no display)
 
 Supported GNSS:
 - u-blox NEO-M10 GPS module (or anything speaks the same protocol)
@@ -62,15 +62,15 @@ Structure:
 
 The device has two modes:
 
-1. **Pairing mode** — run when the user taps a button during the 3-second boot splash. Scans for a new Nikon camera, runs the 4-stage BLE handshake, bonds over Bluetooth Classic, and saves the camera info.
+1. **Pairing mode** — triggered during the boot splash: on M5Stack Core2 by tapping a button within 3 seconds; on ESP32 WROOM 32E by shorting pin 19 to GND during the 2-second detection window. Scans for a new Nikon camera, runs the 4-stage BLE handshake, bonds over Bluetooth Classic, and saves the camera info.
 2. **Normal mode** — the default. Scans for saved cameras, reconnects when in range, and sends the 41-byte GPS payload to the camera whenever a fresh GPS fix is available. Should support multiple cameras connecting at the same time.
+
+## RTC (ESP32 WROOM 32E)
+
+The ESP32 WROOM 32E has no battery-backed external RTC, so it uses the chip's internal RTC with `TZ=GMT`. On cold boot the system clock reads 1970-01-01 until GNSS syncs it via `setRTC`. The `esp32-wroom-32e-*` environments select the internal 8.5 MHz oscillator divided by 256 (`CONFIG_RTC_CLK_SRC_INT_8MD256=y`) for better timekeeping accuracy at the cost of slightly higher deep-sleep current.
 
 ## UI / power saving (M5Stack Core2 only)
 
 - Show a simple status screen with GPS fix and connection status.
 - Turn the screen backlight off after a timeout; wake it on touch or button press.
 - Start with one camera; multi-camera support can be added later.
-
-## Open tasks
-
-- Finish ESP32 WROOM 32E board support (boot mode detection, RTC, serial-based pairing flow)

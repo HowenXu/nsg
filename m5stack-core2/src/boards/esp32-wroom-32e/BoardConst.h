@@ -1,0 +1,11 @@
+#ifndef BOARD_CONST_H
+#define BOARD_CONST_H
+
+#ifndef BOOTMODE_DETECT_PIN
+#define BOOTMODE_DETECT_PIN 19
+#endif
+#ifndef BOOTMODE_DETECT_DELAY_MS
+#define BOOTMODE_DETECT_DELAY_MS 2000
+#endif
+
+#endif
