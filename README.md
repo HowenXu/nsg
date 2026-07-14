@@ -26,13 +26,13 @@ Currently the kotlin PoC can pair new devices (test with Z50II and Z8) and conne
 
 TODO: make it more robus? Like auto-reconnect when camera wakes up from idle. Also maybe connecting to multiple BLE devices?
 
-## M5Stack Core 2 (The final product)
+## ESP32 (The final product)
 
-The current plan is to use an M5Stack Core2 as the dedicated hardware. The original M5StackS3/CoreS3 idea was ruled out because the ESP32-S3 only supports BLE and does not have Bluetooth Classic, which the Nikon smart-device protocol requires for bonding. The Core2 uses the original ESP32, which has both BLE and Bluetooth Classic.
+The dedicated hardware runs on the ESP32. The original M5StackS3/CoreS3 idea was ruled out because the ESP32-S3 only supports BLE and does not have Bluetooth Classic, which the Nikon smart-device protocol requires for bonding. The original ESP32 has both BLE and Bluetooth Classic, which is why it is the target platform.
 
 Moved from PlatformIO to [pioarduino](https://github.com/pioarduino/platform-espressif32) because platformio sucks. They stay at old version of arduino-esp32. The pioarduino fixed this.
 
-The code is pretty much finished, it can pair new cameras, talk to a UBlox GNSS module, parse NMEA and send TIME and GEO payload over BLE.
+The code is pretty much finished, it can pair new cameras, talk to a UBlox GNSS module, parse NMEA and send TIME and GEO payload over BLE. It supports multiple boards (e.g. M5Stack Core2 and ESP32 WROOM 32E); see `esp32/README.md` for details.
 
 ## Known Camera Quirks
 
