@@ -52,6 +52,7 @@ The app auto-generates a controller name in SnapBridge's exact format (`Android_
 - Minimum **Android 7 (API 24)** — an old spare phone works great;
 - Verified devices: **Huawei Mate 40 Pro** and **Huawei MatePad Pro 10.8**;
 - Camera tested: **Nikon Z7 II only**; in theory any Z camera supporting SnapBridge smart-device mode.
+- Currently only Bluetooth-mode support is implemented: Z-mount mirrorless cameras and some last-generation DSLRs with Bluetooth. WiFi connectivity is still in progress.
 - If you run into connection problems or any other bugs, or have improvement
   suggestions, please open an [issue](https://github.com/HowenXu/nsg/issues).
   I check them periodically.
@@ -100,6 +101,7 @@ After connecting you can leave the app; it stays connected via the foreground se
 
 ## Known issues
 
+- Currently only Bluetooth-mode support is implemented: Z-mount mirrorless cameras and some last-generation DSLRs with Bluetooth. WiFi connectivity is still in progress.
 - **Do not clear SnapBridge's data or reinstall it**: it would generate a new device identity and you'd need to re-run the auto-extraction;
 - Nikon camera LCD has a firmware-level bug displaying fractional minutes (e.g. `51.002'` shown as `51.2'`), but the EXIF coordinates written to photos are correct (see the original project).
 - The app does not have a custom icon yet (the author is too lazy to make one 😋). If you would like to contribute one, please open an [issue](https://github.com/HowenXu/nsg/issues).
