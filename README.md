@@ -1,103 +1,105 @@
-# nsg - 尼康智能 GPS（安卓完整实现）
+> 中文版 README：[README.zh-CN.md](README.zh-CN.md)
 
-> English README: [README_EN.md](README_EN.md)
+# nsg - Nikon Smart GPS (Complete Android Implementation)
 
-一个 Nikon SnapBridge 的替代方案：通过蓝牙 smart-device 模式，把手机的 GPS 位置持续注入尼康 Z 系列相机，让照片自动带上地理坐标。
+A SnapBridge alternative that feeds GPS coordinates from your phone into Nikon Z-series cameras over Bluetooth smart-device mode, so your photos are automatically geotagged.
 
-本项目在 [hurui200320/nsg](https://github.com/hurui200320/nsg) 的基础上，**完成了安卓端的完整实现**（原作者只提供了安卓 PoC 与 ESP32 方案）。配对协议逆向成果来自 [gkoh/furble](https://github.com/gkoh/furble)。
+This project is based on [hurui200320/nsg](https://github.com/hurui200320/nsg) and **completes the Android implementation** (the original author only shipped an Android PoC plus an ESP32 solution). The pairing-protocol reverse engineering comes from [gkoh/furble](https://github.com/gkoh/furble).
 
-> 背景：国内销售的相机被强制禁用了内置 GPS，SnapBridge 又存在不稳定、耗电高等问题。这个项目让一台闲置的安卓手机变成相机的专用 GPS 设备。
-
----
-
-## 功能详解
-
-### 1. SnapBridge 设备标识自动破解（核心特性）
-
-相机一旦和 SnapBridge 配对过，就只接受 SnapBridge 的「设备标识」。本项目通过数学反解，可以自动恢复该标识，让本 App **与 SnapBridge 无缝切换，无需删除任何配对记录**。
-
-破解算法单独维护在独立项目 [snapbridge-id-extractor](https://github.com/HowenXu/snapbridge-id-extractor) 中（含完整原理说明与代码）。本 App 在「配对新相机」时若检测到相机已有配对记录，会自动调用该算法完成破解并连接（日志区会实时输出进度）。
-
-### 2. 控制器名称自动伪装
-
-App 会自动生成与 SnapBridge 相同格式的控制器名称（`Android_机型_四位随机数`），相机端显示的名字风格与 SnapBridge 一致。
-
-### 3. 真实 GPS 注入
-
-- 连接相机后自动开启定位（GPS + 网络定位），实时把经纬度/精度打包成尼康 GEO 载荷写入相机；
-- 低功耗策略：静止且近期已发送时跳过；30 秒兜底保活；
-- 断开连接后自动关闭定位，省电。
-
-### 4. 后台运行与低耗电
-
-- 前台服务 + `START_STICKY`，任务移除后自动重启；
-- 启动时自动检查电池优化豁免并主动申请（保证后台存活）；
-- 连接成功后可保持后台运行，低频率发送 GPS。
-
-### 5. 已保存相机管理
-
-- 支持保存多台相机；列表支持「连接」「自动提取标识」「设为默认」「删除」；
-- 多台相机时可设置「启动时默认连接」的那一台；
-- 启动自动连接带 10 秒超时，连不上自动停止。
-
-### 6. 界面与本地化
-
-- 主界面分状态区 / 日志区 / 操作区，日志可滚动查看；
-- 右上角三点菜单进入「高级设置」页（相机端设备名、固定设备标识）；
-- 连接过程中按钮显示加载动画；
-- 自动跟随系统语言：中文系统显示中文，其他语言显示英文。
-
-### 7. 兼容性
-
-- 最低支持 **Android 7（API 24）**，可放心使用闲置老手机；
-- 已实测机型：**华为 Mate 40 Pro**、**华为 MatePad Pro 10.8**；
-- 相机实测：**仅实测尼康 Z7 II**；理论上支持所有 SnapBridge 智能设备模式的 Z 相机。
-- 如遇连接不上等软件 bug 或任何改进建议，请提交 [Issue](https://github.com/HowenXu/nsg/issues)，本人会不定期查看。
+> Background: cameras sold in some regions ship with GPS disabled by firmware, and SnapBridge is unstable and battery-hungry. This project turns a spare Android phone into a dedicated GPS device for your camera.
 
 ---
 
-## 使用教程
+## Features
 
-### 1. 安装
+### 1. Automatic SnapBridge DeviceID extraction (core feature)
 
-从 [Releases](https://github.com/HowenXu/nsg/releases) 下载 `Nikon_Smart_GPS.apk` 安装。首次打开请允许：
+Once a camera has been paired with SnapBridge, it only accepts SnapBridge's device identity. This app recovers that identity mathematically, so you can **switch freely between this app and SnapBridge without deleting any pairing records**.
 
-- 位置权限（获取 GPS）；
-- 蓝牙权限（连接相机）；
-- 通知权限（前台服务通知）；
-- 电池优化豁免（系统弹窗里点「允许」）。
+The extraction algorithm lives in its own project, [snapbridge-id-extractor](https://github.com/HowenXu/snapbridge-id-extractor) (full explanation and source included). When you tap "Pair New Camera" and the camera already has a pairing record, the app runs that algorithm automatically and connects (progress is shown in the log panel).
 
-### 2. 相机已用 SnapBridge 配对过（最常见情况）
+### 2. Automatic controller-name spoofing
 
-1. 打开 App，点「配对新相机」；
-2. 列表中选中你的相机；
-3. 如果相机已有配对记录，App 会自动破解 SnapBridge 设备标识（日志区会实时显示进度）；
-4. 破解成功后自动连接，状态变为「就绪」；
-5. 以后可以直接用「连接已保存相机」快速连接，与 SnapBridge 互切**无需删除配对记录**。
+The app auto-generates a controller name in SnapBridge's exact format (`Android_<model>_<random>`), so the name shown on the camera matches the SnapBridge style.
 
-### 3. 全新相机（从未配对）
+### 3. Real GPS injection
 
-直接「配对新相机」→ 选中相机 → 按提示在系统弹窗完成蓝牙配对即可。
+- Location (GPS + network) starts automatically after connecting and is packed into Nikon GEO payloads written to the camera;
+- Battery-aware: skips sending when stationary and recently sent; 30-second keep-alive fallback;
+- Location stops automatically when disconnected.
 
-### 4. 拍照带 GPS
+### 4. Background operation and low power
 
-连接成功后（状态「就绪」），相机 LCD 会显示 GPS 图标/坐标，此时拍摄的照片 EXIF 会包含位置信息。
+- Foreground service + `START_STICKY`, auto-restart after task removal;
+- Requests battery-optimization exemption at startup;
+- Stays connected in the background and keeps GPS flowing at a low rate.
 
-### 5. 后台使用
+### 5. Saved-camera management
 
-连接后可以退回桌面，App 会以前台服务方式保持连接并持续注入 GPS。建议在系统设置里把本 App 加入电池白名单/自启动白名单（国产 ROM 尤其重要）。
+- Multiple cameras supported; per-camera actions: Connect, Auto-Extract ID, Set Default, Delete;
+- With multiple cameras, pick the "default at startup" one;
+- Startup auto-connect has a 10-second timeout.
 
-### 6. 高级设置
+### 6. UI and localization
 
-右上角 `⋮` → 「高级设置（一般无需更改）」：
+- Status / log / actions layout, scrollable logs;
+- Three-dot menu opens "Advanced Settings" (device name, fixed ID);
+- Loading spinner on buttons while connecting;
+- Language follows the system: Chinese for Chinese locales, English otherwise.
 
-- **相机端设备名**：相机显示的控制器名称（默认自动生成，一般无需改）；
-- **固定设备标识**：SnapBridge 的完整 16 位设备标识。自动破解成功后会自动填入，一般无需手动改。
+### 7. Compatibility
+
+- Minimum **Android 7 (API 24)** — an old spare phone works great;
+- Verified devices: **Huawei Mate 40 Pro** and **Huawei MatePad Pro 10.8**;
+- Camera tested: **Nikon Z7 II only**; in theory any Z camera supporting SnapBridge smart-device mode.
+- If you run into connection problems or any other bugs, or have improvement
+  suggestions, please open an [issue](https://github.com/HowenXu/nsg/issues).
+  I check them periodically.
 
 ---
 
-## 已知问题
+## Usage
 
-- **不要清除 SnapBridge 的数据或重装它**：否则它会重新生成设备标识，需要重新「自动提取」一次；
-- 尼康相机 LCD 上的坐标显示存在固件级小数显示 bug（如 `51.002'` 显示成 `51.2'`），但写入照片 EXIF 的坐标是正确的（详见原项目说明）。
-- 软件没有做图标，我很懒得搞，等一位愿意贡献的有缘人可以直接给我发 [issue](https://github.com/HowenXu/nsg/issues)😋😋
+### 1. Install
+
+Download `Nikon_Smart_GPS.apk` from [Releases](https://github.com/HowenXu/nsg/releases). On first launch, allow:
+
+- Location permission (for GPS);
+- Bluetooth permission (to connect);
+- Notification permission (foreground service);
+- Battery-optimization exemption (tap "Allow" in the system dialog).
+
+### 2. Camera already paired with SnapBridge (most common)
+
+1. Open the app and tap "Pair New Camera";
+2. Select your camera from the list;
+3. If the camera has a pairing record, the app auto-extracts the SnapBridge DeviceID (progress is shown in the log panel);
+4. On success it connects and the status becomes "Ready";
+5. Afterwards use "Connect Saved" for quick connects — switching with SnapBridge needs **no pairing deletion**.
+
+### 3. Brand-new camera
+
+Tap "Pair New Camera", select it, and confirm the system Bluetooth pairing dialog.
+
+### 4. Geotagging
+
+Once connected (status "Ready"), the camera LCD shows a GPS indicator/coordinates, and photos you take carry EXIF location data.
+
+### 5. Background use
+
+After connecting you can leave the app; it stays connected via the foreground service and keeps feeding GPS. Add the app to your ROM's battery whitelist/autostart list (important on Chinese ROMs).
+
+### 6. Advanced settings
+
+`⋮` (top-right) → "Advanced settings (no changes needed)":
+
+- **Camera-side device name**: the controller name shown on the camera (auto-generated by default);
+- **Fixed device ID**: SnapBridge's full 16-hex identity. Auto-filled after successful extraction.
+
+---
+
+## Known issues
+
+- **Do not clear SnapBridge's data or reinstall it**: it would generate a new device identity and you'd need to re-run the auto-extraction;
+- Nikon camera LCD has a firmware-level bug displaying fractional minutes (e.g. `51.002'` shown as `51.2'`), but the EXIF coordinates written to photos are correct (see the original project).
+- The app does not have a custom icon yet (the author is too lazy to make one 😋). If you would like to contribute one, please open an [issue](https://github.com/HowenXu/nsg/issues).

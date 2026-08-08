@@ -3,8 +3,8 @@ package info.skyblond.nsp.ui
 import java.util.Locale
 
 /**
- * 轻量级本地化：自动跟随系统语言。
- * 中文系统显示中文，其他语言显示英文，不提供手动选择。
+ * Lightweight localization that follows the system language.
+ * Chinese locales show Chinese, everything else shows English. No manual switch.
  */
 object L10n {
     val isChinese: Boolean =

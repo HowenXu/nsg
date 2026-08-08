@@ -26,7 +26,7 @@ class SettingsRepository(context: Context) {
         return loadSavedCameras().firstOrNull { it.name == name }
     }
 
-    /** 启动时默认自动连接的相机名；未设置则为 null。 */
+    /** Camera name auto-connected at startup; null if none is set. */
     fun defaultConnectCameraName(): String? =
         prefs.getString(KEY_DEFAULT_CONNECT, null)?.takeIf { it.isNotBlank() }
 

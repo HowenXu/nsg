@@ -130,7 +130,7 @@ private fun MainScreen(viewModel: MainViewModel) {
         settingsRepo.setFixedDeviceId(sanitized)
     }
 
-    // 每次启动检查电池优化豁免；未豁免则主动申请。
+    // Check the battery-optimization exemption on startup and request it if missing.
     LaunchedEffect(Unit) {
         val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
         if (!pm.isIgnoringBatteryOptimizations(context.packageName)) {
@@ -155,7 +155,7 @@ private fun MainScreen(viewModel: MainViewModel) {
         uiState.connectionState is ConnectionState.Bonding
     val pairingButtonsEnabled = !connected && !connectionInProgress
 
-    // 高级设置页支持系统返回键返回主页
+    // BackHandler: the system back key returns from the advanced-settings page to the main screen
     BackHandler(enabled = showAdvancedSettingsPage) {
         showAdvancedSettingsPage = false
     }
@@ -413,7 +413,7 @@ private fun TitleRow(onOpenAdvanced: () -> Unit) {
     }
 }
 
-/** 独立的高级设置页：包含两个输入框和返回按钮。 */
+/** Standalone advanced-settings page with the two input fields and a back button. */
 @Composable
 private fun AdvancedSettingsPage(
     spoofName: String,

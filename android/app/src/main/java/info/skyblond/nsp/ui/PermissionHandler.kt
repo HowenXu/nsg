@@ -114,13 +114,13 @@ fun BluetoothEnableGate(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = "连接相机需要开启蓝牙。",
+                text = L10n.t("连接相机需要开启蓝牙。", "Bluetooth is required to connect to the camera."),
                 style = MaterialTheme.typography.bodyLarge,
                 textAlign = TextAlign.Center
             )
             Spacer(modifier = Modifier.height(16.dp))
             Button(onClick = { launcher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)) }) {
-                Text("开启蓝牙")
+                Text(L10n.t("开启蓝牙", "Enable Bluetooth"))
             }
             Spacer(modifier = Modifier.height(8.dp))
             Button(onClick = {

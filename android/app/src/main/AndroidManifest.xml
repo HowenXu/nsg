@@ -22,7 +22,7 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <queries>
-        <!-- 需要读取 SnapBridge 的首次安装时间以反解其设备标识 -->
+        <!-- Query SnapBridge so we can read its first-install time to recover its device ID -->
         <package android:name="com.nikon.snapbridge.cmru" />
     </queries>
 

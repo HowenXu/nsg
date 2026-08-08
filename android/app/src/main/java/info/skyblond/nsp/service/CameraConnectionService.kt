@@ -388,7 +388,7 @@ class CameraConnectionService : Service(), CameraBleManager.BleListener {
         }
     }
 
-    /** 设置/取消“启动时默认连接”的相机。 */
+    /** Set or clear the startup default camera. */
     fun setDefaultCamera(camera: PairedCamera) {
         serviceScope.launch {
             val isDefault = settingsRepository.defaultConnectCameraName() == camera.name
@@ -403,7 +403,7 @@ class CameraConnectionService : Service(), CameraBleManager.BleListener {
         }
     }
 
-    /** 从已保存列表删除相机。 */
+    /** Delete a camera from the saved list. */
     fun deleteCamera(camera: PairedCamera) {
         serviceScope.launch {
             settingsRepository.removeCamera(camera)
