@@ -17,11 +17,23 @@ class NikonPairingEngine(
 
     /**
      * Build stage 1. If [saved] is provided, its device/nonce are reused.
+     * [deviceOverride] forces a specific controller device ID (e.g. the ID the
+     * camera advertises, or a fixed SnapBridge-compatible ID) and regenerates
+     * a fresh nonce, so the camera recognizes this app as a previously paired device.
      */
-    fun createStage1(saved: PairedCamera? = null): PairingMessage {
+    fun createStage1(
+        saved: PairedCamera? = null,
+        deviceOverride: Long? = null,
+        nonceOverride: Long? = null
+    ): PairingMessage {
         val timestamp = random.nextLong()
-        val device = saved?.device ?: generateDeviceId()
-        val nonce = saved?.nonce ?: generateNonce()
+        val device = deviceOverride ?: saved?.device ?: generateDeviceId()
+        val nonce = nonceOverride
+            ?: if (deviceOverride != null && deviceOverride != saved?.device) {
+                generateNonce()
+            } else {
+                saved?.nonce ?: generateNonce()
+            }
         return PairingMessage(stage = 0x01, timestamp = timestamp, device = device, nonce = nonce)
     }
 

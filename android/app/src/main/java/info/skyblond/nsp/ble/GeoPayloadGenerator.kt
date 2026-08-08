@@ -14,6 +14,43 @@ object GeoPayloadGenerator {
 
     private const val HEADER: Short = 0x007F
 
+    /**
+     * Builds a 41-byte GEO payload from a real location fix.
+     */
+    fun build(latitude: Double, longitude: Double, altitude: Double, timestamp: ZonedDateTime): ByteArray {
+        val latCoord = decimalToNikon(latitude, 'N', 'S')
+        val lonCoord = decimalToNikon(longitude, 'E', 'W')
+
+        val buffer = ByteBuffer.allocate(41).order(ByteOrder.LITTLE_ENDIAN)
+        buffer.putShort(HEADER)
+        buffer.put(latCoord.direction.code.toByte())
+        buffer.put(latCoord.degrees.toByte())
+        buffer.put(latCoord.minutes.toByte())
+        buffer.put(latCoord.submin1.toByte())
+        buffer.put(latCoord.submin2.toByte())
+        buffer.put(lonCoord.direction.code.toByte())
+        buffer.put(lonCoord.degrees.toByte())
+        buffer.put(lonCoord.minutes.toByte())
+        buffer.put(lonCoord.submin1.toByte())
+        buffer.put(lonCoord.submin2.toByte())
+        buffer.put(4.toByte()) // satellites (not available from Location API; fixed plausible value)
+        buffer.put('P'.code.toByte()) // altitude ref = positive
+        buffer.putShort(altitude.toInt().toShort())
+        // Embedded 7-byte time: year LE, month, day, hour, minute, second
+        buffer.putShort(timestamp.year.toShort())
+        buffer.put(timestamp.monthValue.toByte())
+        buffer.put(timestamp.dayOfMonth.toByte())
+        buffer.put(timestamp.hour.toByte())
+        buffer.put(timestamp.minute.toByte())
+        buffer.put(timestamp.second.toByte())
+        buffer.put(0.toByte()) // subseconds
+        buffer.put(0x01.toByte()) // valid
+        buffer.put("WGS-84".toByteArray(Charsets.US_ASCII))
+        // 10 bytes padding
+        repeat(10) { buffer.put(0x00.toByte()) }
+
+        return buffer.array()
+    }
     fun buildFake(): ByteArray {
         val lat = Random.nextDouble(-90.0, 90.0)
         val lon = Random.nextDouble(-180.0, 180.0)

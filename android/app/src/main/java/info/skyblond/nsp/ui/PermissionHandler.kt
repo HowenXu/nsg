@@ -114,19 +114,19 @@ fun BluetoothEnableGate(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text(
-                text = "Bluetooth is required to connect to the camera.",
+                text = "连接相机需要开启蓝牙。",
                 style = MaterialTheme.typography.bodyLarge,
                 textAlign = TextAlign.Center
             )
             Spacer(modifier = Modifier.height(16.dp))
             Button(onClick = { launcher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)) }) {
-                Text("Enable Bluetooth")
+                Text("开启蓝牙")
             }
             Spacer(modifier = Modifier.height(8.dp))
             Button(onClick = {
                 context.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
             }) {
-                Text("Open Bluetooth Settings")
+                Text("打开蓝牙设置")
             }
         }
     }
@@ -145,13 +145,13 @@ private fun PermissionRationale(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = "This app needs Bluetooth and Location permissions to scan for and connect to the Nikon camera.",
+            text = "本应用需要蓝牙和定位权限，用于扫描并连接尼康相机。",
             style = MaterialTheme.typography.bodyLarge,
             textAlign = TextAlign.Center
         )
         Spacer(modifier = Modifier.height(16.dp))
         Button(onClick = onRequest) {
-            Text("Grant Permissions")
+            Text("授予权限")
         }
     }
 }
