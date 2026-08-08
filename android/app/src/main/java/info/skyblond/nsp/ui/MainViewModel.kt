@@ -13,6 +13,7 @@ import androidx.lifecycle.viewModelScope
 import info.skyblond.nsp.data.DiscoveredCamera
 import info.skyblond.nsp.data.PairedCamera
 import info.skyblond.nsp.service.CameraConnectionService
+import info.skyblond.nsp.service.GpsState
 import info.skyblond.nsp.service.ConnectionState
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -94,10 +95,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             .launchIn(viewModelScope)
             .also { serviceJobs.add(it) }
 
+        svc.defaultCameraName
+            .onEach { name -> _uiState.update { it.copy(defaultCameraName = name) } }
+            .launchIn(viewModelScope)
+            .also { serviceJobs.add(it) }
+
+        svc.gpsState
+            .onEach { gps -> _uiState.update { it.copy(gpsState = gps) } }
+            .launchIn(viewModelScope)
+            .also { serviceJobs.add(it) }
         svc.events
             .onEach { message ->
                 _uiState.update { state ->
-                    val events = (listOf(message) + state.lastEvents).take(5)
+                    val events = (listOf(message) + state.lastEvents).take(100)
                     state.copy(lastEvents = events)
                 }
             }
@@ -115,7 +125,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun onSendClicked() {
-        service?.sendFakeGeo()
+        service?.sendGeoOnce()
     }
 
     fun onDisconnectClicked() {
@@ -130,6 +140,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun onSavedCameraSelected(camera: PairedCamera) {
         service?.connectToSavedCamera(camera)
         _uiState.update { it.copy(showSavedDialog = false) }
+    }
+
+    fun onAutoExtractClicked(camera: PairedCamera) {
+        service?.startAutoExtract(camera)
+        _uiState.update { it.copy(showSavedDialog = false) }
+    }
+
+    fun onSetDefaultCamera(camera: PairedCamera) {
+        service?.setDefaultCamera(camera)
+    }
+
+    fun onDeleteCamera(camera: PairedCamera) {
+        service?.deleteCamera(camera)
     }
 
     fun onDismissDiscoveredDialog() {
@@ -148,6 +171,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val savedCameras: List<PairedCamera> = emptyList(),
         val showDiscoveredDialog: Boolean = false,
         val showSavedDialog: Boolean = false,
-        val lastEvents: List<String> = emptyList()
+        val defaultCameraName: String? = null,
+        val lastEvents: List<String> = emptyList(),
+        val gpsState: GpsState = GpsState()
     )
 }

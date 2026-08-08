@@ -8,6 +8,7 @@ import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothProfile
 import android.content.Context
+import android.os.Build
 import android.util.Log
 import java.util.UUID
 
@@ -28,6 +29,10 @@ class CameraBleManager(
     private var not1Characteristic: BluetoothGattCharacteristic? = null
     private var subscriptionStep = 0
 
+    @Volatile
+    var isConnected: Boolean = false
+        private set
+
     fun connect(device: BluetoothDevice) {
         Log.d(TAG, "Connecting to ${device.address} (${device.name ?: "no name"})")
         gatt = device.connectGatt(context, false, this, BluetoothDevice.TRANSPORT_LE)
@@ -40,6 +45,7 @@ class CameraBleManager(
 
     fun close() {
         Log.d(TAG, "Closing GATT")
+        isConnected = false
         gatt?.close()
         gatt = null
     }
@@ -97,10 +103,12 @@ class CameraBleManager(
         }
         when (newState) {
             BluetoothProfile.STATE_CONNECTED -> {
+                isConnected = true
                 listener.onEvent(BleEvent.Connected)
                 gatt.requestMtu(517)
             }
             BluetoothProfile.STATE_DISCONNECTED -> {
+                isConnected = false
                 listener.onEvent(BleEvent.Disconnected)
             }
         }
@@ -192,7 +200,14 @@ class CameraBleManager(
         gatt.setCharacteristicNotification(characteristic, true)
         val descriptor = characteristic.getDescriptor(CCCD_UUID)
         if (descriptor != null) {
-            gatt.writeDescriptor(descriptor, BluetoothGattDescriptor.ENABLE_INDICATION_VALUE)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                gatt.writeDescriptor(descriptor, BluetoothGattDescriptor.ENABLE_INDICATION_VALUE)
+            } else {
+                @Suppress("DEPRECATION")
+                descriptor.value = BluetoothGattDescriptor.ENABLE_INDICATION_VALUE
+                @Suppress("DEPRECATION")
+                gatt.writeDescriptor(descriptor)
+            }
         }
     }
 
@@ -202,7 +217,14 @@ class CameraBleManager(
         gatt.setCharacteristicNotification(characteristic, true)
         val descriptor = characteristic.getDescriptor(CCCD_UUID)
         if (descriptor != null) {
-            gatt.writeDescriptor(descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                gatt.writeDescriptor(descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
+            } else {
+                @Suppress("DEPRECATION")
+                descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+                @Suppress("DEPRECATION")
+                gatt.writeDescriptor(descriptor)
+            }
         }
     }
 
@@ -222,7 +244,14 @@ class CameraBleManager(
             emitError("Characteristic not found: $uuid")
             return
         }
-        gatt.writeCharacteristic(characteristic, data, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            gatt.writeCharacteristic(characteristic, data, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
+        } else {
+            @Suppress("DEPRECATION")
+            characteristic.value = data
+            @Suppress("DEPRECATION")
+            gatt.writeCharacteristic(characteristic)
+        }
     }
 
     private fun emitError(message: String) {
