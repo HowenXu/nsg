@@ -41,7 +41,7 @@ The app auto-generates a controller name in SnapBridge's exact format (`Android_
 ### 6. UI and localization
 
 - Status / log / actions layout, scrollable logs;
-- Three-dot menu opens "Advanced Settings" (device name, fixed ID); system back key works;
+- Three-dot menu opens "Advanced Settings" (device name, fixed ID);
 - Loading spinner on buttons while connecting;
 - Language follows the system: Chinese for Chinese locales, English otherwise.
 
@@ -50,6 +50,9 @@ The app auto-generates a controller name in SnapBridge's exact format (`Android_
 - Minimum **Android 7 (API 24)** — an old spare phone works great;
 - Verified devices: **Huawei Mate 40 Pro** and **Huawei MatePad Pro 10.8**;
 - Camera tested: **Nikon Z7 II only**; in theory any Z camera supporting SnapBridge smart-device mode.
+- If you run into connection problems or any other bugs, or have improvement
+  suggestions, please open an [issue](https://github.com/HowenXu/nsg/issues).
+  I check them periodically.
 
 ---
 
