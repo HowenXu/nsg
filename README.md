@@ -43,3 +43,7 @@ The Nikon camera LCD shows GPS coordinates in **degrees + decimal minutes**, the
 For example, a fractional minute of `51.002'` is shown on the camera LCD as `51.2'`, not `51.002'`. By contrast, `51.688'` is shown correctly as `51.688'`. The failure is not consistent — it appears to depend on the digits of the fractional part.
 
 The value stored in the photo's EXIF tag is correct in both cases (verified with `exiftool`), so the geotagging is accurate. This is a display-only bug in the Nikon camera firmware, not a bug in this project's encoding. This is confirmed on both Z50II and Z8.
+
+## Contributing
+
+Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for how to build the project, report bugs, and submit changes. Contributors are listed in [CONTRIBUTORS.md](CONTRIBUTORS.md).
