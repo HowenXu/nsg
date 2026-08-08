@@ -6,6 +6,7 @@
 build/
 local.properties
 *.log
+android-backup/
 
 # Build outputs
 *.apk
