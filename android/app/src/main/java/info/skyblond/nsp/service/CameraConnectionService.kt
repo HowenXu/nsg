@@ -352,6 +352,19 @@ class CameraConnectionService : Service(), CameraBleManager.BleListener {
             reconnectScanRound = 0
             ensureSpoofName()
             val advertised = camera.manufacturerData?.let { extractAdvertisedDeviceId(it) }
+            val fixedDevice = settingsRepository.fixedDeviceId()
+            if (advertised != null && fixedDevice != null && advertised != fixedDevice) {
+                // The fixed identity no longer matches what the camera advertises (e.g. the
+                // camera was re-paired with another device). Clear it so the auto-extraction
+                // below can recover the correct identity instead of failing with status 133.
+                logEvent(
+                    L10n.t(
+                        "固定设备标识与相机期望不一致（相机期望0x%08X，当前固定0x%08X），已自动清除并重新提取",
+                        "Fixed device ID no longer matches the camera (camera expects 0x%08X, fixed 0x%08X); cleared it and re-extracting"
+                    ).format(advertised, fixedDevice)
+                )
+                settingsRepository.setFixedDeviceId(null)
+            }
             if (advertised != null && settingsRepository.fixedDeviceId() == null) {
                 // The camera already has a pairing record (it advertises the device ID it
                 // expects) - most likely SnapBridge's. Auto-crack the full SnapBridge
