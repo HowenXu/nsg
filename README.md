@@ -1,5 +1,7 @@
 # nsg - 尼康智能 GPS（安卓完整实现）
 
+> English README: [README_EN.md](README_EN.md)
+
 一个 Nikon SnapBridge 的替代方案：通过蓝牙 smart-device 模式，把手机的 GPS 位置持续注入尼康 Z 系列相机，让照片自动带上地理坐标。
 
 本项目在 [hurui200320/nsg](https://github.com/hurui200320/nsg) 的基础上，**完成了安卓端的完整实现**（原作者只提供了安卓 PoC 与 ESP32 方案）。配对协议逆向成果来自 [gkoh/furble](https://github.com/gkoh/furble)。
