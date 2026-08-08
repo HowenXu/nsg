@@ -13,6 +13,8 @@ android-backup/
 *.aab
 *.ap_
 *.dex
+*.keystore
+keystore.properties
 
 # OS
 .DS_Store
