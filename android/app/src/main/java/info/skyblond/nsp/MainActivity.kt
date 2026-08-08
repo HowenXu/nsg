@@ -39,6 +39,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material.icons.Icons
@@ -430,45 +431,51 @@ private fun AdvancedSettingsPage(
     onFixedDeviceIdChange: (String) -> Unit,
     onBack: () -> Unit
 ) {
-    Column(
+    Surface(
         modifier = Modifier
-            .fillMaxSize()
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            .fillMaxSize(),
+        color = MaterialTheme.colorScheme.background
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            IconButton(onClick = onBack) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = L10n.t("返回", "Back")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onBack) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = L10n.t("返回", "Back")
+                    )
+                }
+                Text(
+                    text = L10n.t("高级设置", "Advanced Settings"),
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.weight(1f)
                 )
             }
             Text(
-                text = L10n.t("高级设置", "Advanced Settings"),
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.weight(1f)
+                text = L10n.t(
+                    "以下设置一般无需更改；仅在切换 SnapBridge 设备或重新提取标识后需要调整。",
+                    "These are usually fine as-is; only adjust after switching SnapBridge devices or re-extracting the ID."
+                ),
+                style = MaterialTheme.typography.bodySmall
+            )
+            SpoofNameField(
+                value = spoofName,
+                onValueChange = onSpoofNameChange,
+                modifier = Modifier.fillMaxWidth()
+            )
+            FixedDeviceIdField(
+                value = fixedDeviceId,
+                onValueChange = onFixedDeviceIdChange,
+                modifier = Modifier.fillMaxWidth()
             )
         }
-        Text(
-            text = L10n.t(
-                "以下设置一般无需更改；仅在切换 SnapBridge 设备或重新提取标识后需要调整。",
-                "These are usually fine as-is; only adjust after switching SnapBridge devices or re-extracting the ID."
-            ),
-            style = MaterialTheme.typography.bodySmall
-        )
-        SpoofNameField(
-            value = spoofName,
-            onValueChange = onSpoofNameChange,
-            modifier = Modifier.fillMaxWidth()
-        )
-        FixedDeviceIdField(
-            value = fixedDeviceId,
-            onValueChange = onFixedDeviceIdChange,
-            modifier = Modifier.fillMaxWidth()
-        )
     }
 }
 
