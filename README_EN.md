@@ -12,24 +12,9 @@ This project is based on [hurui200320/nsg](https://github.com/hurui200320/nsg) a
 
 ### 1. Automatic SnapBridge DeviceID extraction (core feature)
 
-Once a camera has been paired with SnapBridge, it only accepts SnapBridge's device identity. Previously, switching apps meant deleting the pairing record on both the camera and the phone.
+Once a camera has been paired with SnapBridge, it only accepts SnapBridge's device identity. This app recovers that identity mathematically, so you can **switch freely between this app and SnapBridge without deleting any pairing records**.
 
-By reverse-engineering the SnapBridge APK, we found its device identity is generated as:
-
-```
-new Random(new Date().getTime()).nextBytes(8)
-```
-
-That is: an 8-byte random value seeded with the millisecond timestamp of the first run, generated only once. The camera advertises the first 4 bytes of that identity.
-
-The app therefore:
-1. Reads the 4-byte prefix from the camera advertisement;
-2. Reads SnapBridge's first-install time;
-3. Mathematically inverts the LCG to enumerate all possible seed timestamps;
-4. Connects and verifies each candidate until the camera accepts one;
-5. Saves it as the "fixed device ID" — from then on you can **switch freely between this app and SnapBridge without deleting any pairing records**.
-
-When you tap "Pair New Camera" and the camera already has a pairing record, the app runs the extraction automatically (watch the log panel).
+The extraction algorithm lives in its own project, [snapbridge-id-extractor](https://github.com/HowenXu/snapbridge-id-extractor) (full explanation and source included). When you tap "Pair New Camera" and the camera already has a pairing record, the app runs that algorithm automatically and connects (progress is shown in the log panel).
 
 ### 2. Automatic controller-name spoofing
 
@@ -63,8 +48,8 @@ The app auto-generates a controller name in SnapBridge's exact format (`Android_
 ### 7. Compatibility
 
 - Minimum **Android 7 (API 24)** — an old spare phone works great;
-- Verified on Huawei Mate 40 Pro (HarmonyOS 4.2) and Huawei MRR-W29;
-- Cameras: Nikon Z50 II, Z8 (smart-device mode); in theory any Z camera supporting SnapBridge smart-device mode.
+- Verified devices: **Huawei Mate 40 Pro** and **Huawei MatePad Pro 10.8**;
+- Camera tested: **Nikon Z7 II only**; in theory any Z camera supporting SnapBridge smart-device mode.
 
 ---
 
@@ -112,10 +97,3 @@ After connecting you can leave the app; it stays connected via the foreground se
 
 - **Do not clear SnapBridge's data or reinstall it**: it would generate a new device identity and you'd need to re-run the auto-extraction;
 - Nikon camera LCD has a firmware-level bug displaying fractional minutes (e.g. `51.002'` shown as `51.2'`), but the EXIF coordinates written to photos are correct (see the original project).
-
----
-
-## Credits
-
-- [hurui200320/nsg](https://github.com/hurui200320/nsg) — original project (ESP32 hardware solution + Android PoC)
-- [gkoh/furble](https://github.com/gkoh/furble) — reverse engineering of the Nikon smart-device pairing protocol

@@ -12,24 +12,9 @@
 
 ### 1. SnapBridge 设备标识自动破解（核心特性）
 
-相机一旦和 SnapBridge 配对过，就只接受 SnapBridge 的「设备标识」。以前想换别的软件，必须在相机和手机上同时删除配对记录，非常麻烦。
+相机一旦和 SnapBridge 配对过，就只接受 SnapBridge 的「设备标识」。本项目通过数学反解，可以自动恢复该标识，让本 App **与 SnapBridge 无缝切换，无需删除任何配对记录**。
 
-本项目通过逆向 SnapBridge APK，发现其设备标识是这样生成的：
-
-```
-new Random(new Date().getTime()).nextBytes(8)
-```
-
-即：**以首次运行时的毫秒时间戳为种子，生成 8 字节随机数**，且只生成一次。相机广播中暴露了该标识的前 4 字节。
-
-于是 App 可以：
-1. 读取相机广播的 4 字节前缀；
-2. 读取 SnapBridge 的首次安装时间；
-3. 通过 LCG（线性同余）数学反解出全部可能的种子时间戳；
-4. 逐个连接相机验证，直到相机接受；
-5. 自动保存为「固定设备标识」，此后**与 SnapBridge 无缝切换，无需删除任何配对记录**。
-
-你在「配对新相机」时如果发现相机已有配对记录，App 会自动开始破解（见日志区实时输出）。
+破解算法单独维护在独立项目 [snapbridge-id-extractor](https://github.com/HowenXu/snapbridge-id-extractor) 中（含完整原理说明与代码）。本 App 在「配对新相机」时若检测到相机已有配对记录，会自动调用该算法完成破解并连接（日志区会实时输出进度）。
 
 ### 2. 控制器名称自动伪装
 
@@ -63,8 +48,8 @@ App 会自动生成与 SnapBridge 相同格式的控制器名称（`Android_机�
 ### 7. 兼容性
 
 - 最低支持 **Android 7（API 24）**，可放心使用闲置老手机；
-- 已实测：华为 Mate 40 Pro（鸿蒙 4.2）、华为 MRR-W29；
-- 相机兼容：Nikon Z50 II、Z8（smart-device 模式），理论上支持所有 SnapBridge 智能设备模式的 Z 相机。
+- 已实测机型：**华为 Mate 40 Pro**、**华为 MatePad Pro 10.8**；
+- 相机实测：**仅实测尼康 Z7 II**；理论上支持所有 SnapBridge 智能设备模式的 Z 相机。
 
 ---
 
@@ -112,10 +97,3 @@ App 会自动生成与 SnapBridge 相同格式的控制器名称（`Android_机�
 
 - **不要清除 SnapBridge 的数据或重装它**：否则它会重新生成设备标识，需要重新「自动提取」一次；
 - 尼康相机 LCD 上的坐标显示存在固件级小数显示 bug（如 `51.002'` 显示成 `51.2'`），但写入照片 EXIF 的坐标是正确的（详见原项目说明）。
-
----
-
-## 致谢
-
-- [hurui200320/nsg](https://github.com/hurui200320/nsg) —— 原始项目（ESP32 硬件方案 + 安卓 PoC）
-- [gkoh/furble](https://github.com/gkoh/furble) —— 尼康 smart-device 配对协议的逆向成果
