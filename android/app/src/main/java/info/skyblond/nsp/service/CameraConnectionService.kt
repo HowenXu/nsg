@@ -23,6 +23,7 @@ import android.os.Build
 import android.os.IBinder
 import android.Manifest
 import android.content.pm.PackageManager
+import android.content.pm.ServiceInfo
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
@@ -104,6 +105,9 @@ class CameraConnectionService : Service(), CameraBleManager.BleListener {
     private var autoExtractActive = false
     private var autoExtractCamera: PairedCamera? = null
     private val autoExtractQueue = ArrayDeque<SnapBridgeIdSolver.Candidate>()
+    private var autoExtractOriginalFixedId: String? = null
+    private var classicDiscoveryRetryCount = 0
+    private var lastActivityTime = System.currentTimeMillis()
     private var locationManager: LocationManager? = null
     private var lastLocation: Location? = null
     private var lastSentLocation: Location? = null
@@ -253,7 +257,16 @@ class CameraConnectionService : Service(), CameraBleManager.BleListener {
             stopSelf()
             return START_NOT_STICKY
         }
-        startForeground(NOTIFICATION_ID, buildNotification())
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(
+                NOTIFICATION_ID,
+                buildNotification(),
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+            )
+        } else {
+            startForeground(NOTIFICATION_ID, buildNotification())
+        }
         autoReconnectLastCamera()
         return START_STICKY
     }
@@ -531,10 +544,25 @@ class CameraConnectionService : Service(), CameraBleManager.BleListener {
     }
 
     private fun onAutoExtractCameraFound(camera: PairedCamera, advertisedDevice: Long) {
-        val installTime = snapBridgeInstallTime() ?: run {
+        val installTime = snapBridgeInstallTime()
+        if (installTime == null) {
             autoExtractActive = false
+            autoExtractOriginalFixedId = null
+            logEvent(
+                L10n.t(
+                    "未检测到 SnapBridge（$SNAPBRIDGE_PACKAGE），无法自动提取设备标识，请先安装 SnapBridge",
+                    "SnapBridge ($SNAPBRIDGE_PACKAGE) not found; install it first to auto-extract the device ID"
+                )
+            )
+            updateState(
+                ConnectionState.Error(
+                    L10n.t("未安装 SnapBridge，无法自动提取", "SnapBridge not installed; cannot auto-extract")
+                )
+            )
             return
         }
+        // Remember the previous fixed ID so we can restore it if every candidate is rejected.
+        autoExtractOriginalFixedId = settingsRepository.fixedDeviceIdRaw()
         val now = System.currentTimeMillis()
         logEvent(L10n.t("相机广播设备ID=0x%08X，反解候选种子...", "Camera advertises device ID=0x%08X. Solving candidate seeds...").format(advertisedDevice))
         val candidates = SnapBridgeIdSolver.candidatesFor(advertisedDevice, installTime, now)
@@ -564,6 +592,10 @@ class CameraConnectionService : Service(), CameraBleManager.BleListener {
         val camera = autoExtractCamera
         if (candidate == null || camera == null) {
             autoExtractActive = false
+            // Restore the previous identity so a failed extraction does not leave a
+            // wrong fixed ID behind that would break future connections.
+            settingsRepository.setFixedDeviceId(autoExtractOriginalFixedId)
+            autoExtractOriginalFixedId = null
             logEvent(L10n.t("所有候选均被相机拒绝，未能提取设备标识", "All candidates rejected by the camera; extraction failed"))
             updateState(ConnectionState.Idle)
             return
@@ -598,6 +630,7 @@ class CameraConnectionService : Service(), CameraBleManager.BleListener {
             return
         }
         reconnectScanRound = round
+        markActivity()
         updateState(ConnectionState.Connecting)
         logEvent(if (round == 0) L10n.t("正在扫描已保存的相机...", "Scanning for the saved camera...") else L10n.t("未发现相机广播，继续扫描...", "Camera not found yet, continuing to scan..."))
         reconnectScanTimeoutJob?.cancel()
@@ -708,6 +741,12 @@ class CameraConnectionService : Service(), CameraBleManager.BleListener {
 
     fun disconnect() {
         serviceScope.launch {
+            if (autoExtractActive) {
+                autoExtractActive = false
+                autoExtractQueue.clear()
+                settingsRepository.setFixedDeviceId(autoExtractOriginalFixedId)
+                autoExtractOriginalFixedId = null
+            }
             startupReconnectTimeoutJob?.cancel()
             startupReconnectTimeoutJob = null
             idWriteTimeoutJob?.cancel()
@@ -879,15 +918,23 @@ class CameraConnectionService : Service(), CameraBleManager.BleListener {
         logEvent(L10n.t("服务重启，正在重连 ${camera.name}（10 秒超时）", "Service restarted; reconnecting ${camera.name} (10s timeout)"))
         startupReconnectTimeoutJob?.cancel()
         startupReconnectTimeoutJob = serviceScope.launch {
-            delay(10_000)
-            val current = state.value
-            if (current !is ConnectionState.Ready &&
-                current !is ConnectionState.Busy &&
-                current !is ConnectionState.Error
-            ) {
-                Log.w(TAG, "Startup reconnect timed out (state=$current), stopping")
-                logEvent(L10n.t("10 秒内未能连接相机，已停止自动连接", "Could not connect within 10s; auto-connect stopped"))
-                disconnect()
+            while (true) {
+                delay(1_000)
+                val current = state.value
+                if (current is ConnectionState.Ready ||
+                    current is ConnectionState.Busy ||
+                    current is ConnectionState.Error
+                ) {
+                    break
+                }
+                // Kill only when there has been no progress for 10s (the watchdog resets on
+                // every state change or reconnect-scan round), so slow scans are not cut short.
+                if (System.currentTimeMillis() - lastActivityTime > 10_000) {
+                    Log.w(TAG, "Startup reconnect timed out (state=$current), stopping")
+                    logEvent(L10n.t("10 秒内无进展，已停止自动连接", "No progress for 10s; auto-connect stopped"))
+                    disconnect()
+                    break
+                }
             }
         }
         connectToSavedCamera(camera)
@@ -1035,6 +1082,7 @@ class CameraConnectionService : Service(), CameraBleManager.BleListener {
                 if (autoExtractActive) {
                     autoExtractActive = false
                     autoExtractQueue.clear()
+                    autoExtractOriginalFixedId = null
                     val fixed = settingsRepository.fixedDeviceIdRaw()
                     Log.d(TAG, "Auto-extract: camera accepted candidate $fixed")
                     logEvent(
@@ -1437,14 +1485,38 @@ class CameraConnectionService : Service(), CameraBleManager.BleListener {
                             Log.d(TAG, "createBond() from discovery returned $created")
                             if (!created) {
                                 bondingTimeoutJob?.cancel()
+                                classicDiscoveryRetryCount++
+                                if (classicDiscoveryRetryCount >= MAX_CLASSIC_RETRIES) {
+                                    Log.w(TAG, "createBond kept failing, giving up classic pairing")
+                                    logEvent(
+                                        L10n.t(
+                                            "多次配对失败，已停止。请到系统 设置->蓝牙 手动配对，或确认相机已开机",
+                                            "Repeated pairing failures; stopped. Pair manually in System Settings -> Bluetooth or make sure the camera is on"
+                                        )
+                                    )
+                                    isAwaitingBond = false
+                                    stopClassicDiscovery()
+                                    updateState(ConnectionState.Error(L10n.t("经典蓝牙配对失败", "Classic pairing failed")))
+                                    return
+                                }
                                 serviceScope.launch {
                                     delay(3_000)
                                     if (isAwaitingBond && classicDevice == found) {
                                         Log.w(TAG, "createBond returned false, retrying discovery")
                                         logEvent(L10n.t("配对请求失败，重试发现...", "Pairing request failed; retrying discovery..."))
+                                        // Re-arm the pairing timeout for this retry.
+                                        bondingTimeoutJob?.cancel()
+                                        bondingTimeoutJob = serviceScope.launch {
+                                            delay(20_000)
+                                            if (isAwaitingBond && classicDevice == found) {
+                                                logEvent(L10n.t("配对请求未确认：若手机无配对弹窗，请到系统 设置->蓝牙 手动点击相机完成配对", "Pairing request not confirmed: if no dialog appeared, pair manually in System Settings -> Bluetooth"))
+                                            }
+                                        }
                                         startClassicDiscovery()
                                     }
                                 }
+                            } else {
+                                classicDiscoveryRetryCount = 0
                             }
                         } else {
                             Log.d(TAG, "Ignoring non-camera device: $foundName (${found.address})")
@@ -1601,7 +1673,13 @@ class CameraConnectionService : Service(), CameraBleManager.BleListener {
 
     private fun updateState(newState: ConnectionState) {
         _state.value = newState
+        lastActivityTime = System.currentTimeMillis()
         updateNotification()
+    }
+
+    /** Records activity so the startup auto-connect watchdog only fires when nothing progresses. */
+    private fun markActivity() {
+        lastActivityTime = System.currentTimeMillis()
     }
 
     // -------------------------------------------------------------------------
@@ -1676,6 +1754,7 @@ class CameraConnectionService : Service(), CameraBleManager.BleListener {
         private const val GPS_UPDATE_MIN_DISTANCE_M = 1f
         private const val MIN_SEND_DISTANCE_M = 3f
         private const val MAX_SEND_INTERVAL_MS = 20_000L
+        private const val MAX_CLASSIC_RETRIES = 3
     }
 }
 

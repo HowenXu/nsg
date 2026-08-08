@@ -13,7 +13,7 @@ android {
 
     defaultConfig {
         applicationId = "info.skyblond.nsp"
-        // 兼容 Android 7（API 24）及以上的老手机，当作专用 GPS 设备
+        // Support Android 7 (API 24)+ so an old spare phone can act as the GPS device
         minSdk = 24
         targetSdk = 36
         versionCode = 1
@@ -35,6 +35,9 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+        // java.time is used (ZonedDateTime/Instant/DateTimeFormatter) but only exists
+        // on API 26+; desugar it so Android 7 (API 24) works as promised.
+        isCoreLibraryDesugaringEnabled = true
     }
     buildFeatures {
         compose = true
@@ -42,6 +45,7 @@ android {
 }
 
 dependencies {
+    coreLibraryDesugaring(libs.desugar.jdk.libs)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.compose.material3)

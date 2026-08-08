@@ -125,7 +125,7 @@ private fun MainScreen(viewModel: MainViewModel) {
         settingsRepo.setSpoofControllerName(sanitized)
     }
     val onFixedDeviceIdChange: (String) -> Unit = { value ->
-        val sanitized = value.filter { c -> c.code < 128 }.take(18)
+        val sanitized = value.filter { c -> c.code < 128 }.take(16)
         fixedDeviceId = sanitized
         settingsRepo.setFixedDeviceId(sanitized)
     }
