@@ -100,3 +100,4 @@ After connecting you can leave the app; it stays connected via the foreground se
 
 - **Do not clear SnapBridge's data or reinstall it**: it would generate a new device identity and you'd need to re-run the auto-extraction;
 - Nikon camera LCD has a firmware-level bug displaying fractional minutes (e.g. `51.002'` shown as `51.2'`), but the EXIF coordinates written to photos are correct (see the original project).
+- The app does not have a custom icon yet (the author is too lazy to make one 😋). If you would like to contribute one, please open an [issue](https://github.com/HowenXu/nsg/issues).
