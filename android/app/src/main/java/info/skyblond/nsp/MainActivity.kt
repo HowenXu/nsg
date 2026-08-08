@@ -62,6 +62,7 @@ import info.skyblond.nsp.ui.L10n
 import info.skyblond.nsp.ui.DiscoveredCameraDialog
 import info.skyblond.nsp.ui.MainViewModel
 import info.skyblond.nsp.ui.PermissionHandler
+import info.skyblond.nsp.ui.RequiredPermissions
 import info.skyblond.nsp.ui.BluetoothEnableGate
 import info.skyblond.nsp.ui.SavedCameraDialog
 import info.skyblond.nsp.ui.theme.NikonSmartGPSTheme
@@ -78,7 +79,9 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             NikonSmartGPSTheme {
-                PermissionHandler {
+                PermissionHandler(
+                    onPermissionsGranted = { viewModel.startAndBindService() }
+                ) {
                     BluetoothEnableGate {
                         MainScreen(viewModel = viewModel)
                     }
@@ -89,7 +92,12 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-        viewModel.startAndBindService()
+        // Android 14+ requires the runtime permissions to be held before the
+        // foreground service can call startForeground() with the connectedDevice
+        // / location types; starting it without them crashes (SecurityException).
+        if (RequiredPermissions.allGranted(this)) {
+            viewModel.startAndBindService()
+        }
     }
 
     override fun onStop() {

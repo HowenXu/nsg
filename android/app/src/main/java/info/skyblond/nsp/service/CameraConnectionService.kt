@@ -257,16 +257,7 @@ class CameraConnectionService : Service(), CameraBleManager.BleListener {
             stopSelf()
             return START_NOT_STICKY
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(
-                NOTIFICATION_ID,
-                buildNotification(),
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
-            )
-        } else {
-            startForeground(NOTIFICATION_ID, buildNotification())
-        }
+        startForegroundCompat()
         autoReconnectLastCamera()
         return START_STICKY
     }
@@ -956,6 +947,47 @@ class CameraConnectionService : Service(), CameraBleManager.BleListener {
     private fun hasBluetoothPermission(): Boolean {
         return Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
             checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+    }
+
+    /**
+     * Start the foreground service without crashing on Android 14+ when the
+     * runtime permission for a declared type has not been granted yet: the
+     * location type is only attached when the location permission is held, and
+     * any SecurityException falls back to the bare connectedDevice type before
+     * giving up.
+     */
+    private fun startForegroundCompat() {
+        val notification = buildNotification()
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            startForeground(NOTIFICATION_ID, notification)
+            return
+        }
+        var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+        if (hasLocationPermission()) {
+            type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+        }
+        try {
+            startForeground(NOTIFICATION_ID, notification, type)
+        } catch (e: SecurityException) {
+            Log.w(TAG, "startForeground(type=$type) failed: ${e.message}")
+            try {
+                startForeground(
+                    NOTIFICATION_ID,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+                )
+            } catch (e2: SecurityException) {
+                Log.w(TAG, "startForeground(connectedDevice) failed too: ${e2.message}")
+                stopSelf()
+            }
+        }
+    }
+
+    private fun hasLocationPermission(): Boolean {
+        val fine = checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+        val coarse = checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION)
+        return fine == PackageManager.PERMISSION_GRANTED ||
+            coarse == PackageManager.PERMISSION_GRANTED
     }
 
     // -------------------------------------------------------------------------
