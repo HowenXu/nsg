@@ -18,6 +18,9 @@ It can pair with new cameras and connect to saved ones over Bluetooth, inject re
 
 Full documentation is in [android/README.md](android/README.md) (中文版见 [android/README.zh-CN.md](android/README.zh-CN.md)).
 
+- 中文版：[**使用教程**](android/README.zh-CN.md#%E4%BD%BF%E7%94%A8%E6%95%99%E7%A8%8B)
+- English：[**使用教程**](android/README.md#usage)
+
 ## Kotlin PoC (Linux only, require Bluez)
 
 Apparently Android's BLE and BT stack is not easy to use. Using it as a PoC defeat the purpose of clean code just focusing on the core features. So, as a backend developer, I decide to use whatever I'm comfortable: the good old JVM.
