@@ -720,8 +720,9 @@ class CameraConnectionService : Service(), CameraBleManager.BleListener {
             scanner.startScan(emptyList(), settings, callback)
             reconnectScanTimeoutJob = serviceScope.launch {
                 delay(20_000)
-                if (reconnectScanCallback != null) {
-                    try { scanner.stopScan(reconnectScanCallback!!) } catch (_: Exception) {}
+                val activeCallback = reconnectScanCallback
+                if (activeCallback != null) {
+                    try { scanner.stopScan(activeCallback) } catch (_: Exception) {}
                     reconnectScanCallback = null
                     if (round == 0) {
                         Log.w(TAG, "Reconnect scan round 1 timed out; scanning again")
@@ -1053,7 +1054,7 @@ class CameraConnectionService : Service(), CameraBleManager.BleListener {
                         logEvent(
                             L10n.t("连接被相机拒绝，自动重新扫描以采用相机期望的设备ID（第 ${reconnectRetryCount}/2 次）", "Connection rejected by camera; rescanning to adopt the expected device ID (attempt ${reconnectRetryCount}/2)")
                         )
-                        startReconnectScan(savedCamera!!, round = 0)
+                        savedCamera?.let { startReconnectScan(it, round = 0) }
                     } else {
                         logEvent(L10n.t("蓝牙错误: ${event.message}", "Bluetooth error: ${event.message}"))
                         if (event.message.contains("Connection state change")) {
@@ -1388,7 +1389,7 @@ class CameraConnectionService : Service(), CameraBleManager.BleListener {
         }
         Log.d(TAG, "reconnectAfterBonding: ${device.address} using saved stage 1 data")
         pairingMode = PairingMode.RECONNECT
-        savedCamera = PairedCamera(
+        val newCamera = PairedCamera(
             name = device.name ?: "Nikon",
             address = device.address,
             addressType = device.type,
@@ -1396,7 +1397,8 @@ class CameraConnectionService : Service(), CameraBleManager.BleListener {
             nonce = stage1.nonce,
             controllerName = controllerName
         )
-        settingsRepository.saveCamera(savedCamera!!)
+        savedCamera = newCamera
+        settingsRepository.saveCamera(newCamera)
         refreshSavedCameras()
         connectCurrentDevice()
         classicBondComplete = true
