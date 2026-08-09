@@ -13,3 +13,15 @@
 .externalNativeBuild
 .cxx
 local.properties
+# Local build artifacts and signing material (keep out of git)
+.kotlin/
+*.log
+build/
+*.apk
+*.aab
+*.ap_
+*.dex
+*.keystore
+keystore.properties
+android-backup/
+Thumbs.db
