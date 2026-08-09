@@ -1,5 +1,3 @@
-> 中文版 README：[README.zh-CN.md](README.zh-CN.md)
-
 # nsg - Nikon Smart GPS
 
 An alternative for Nikon's SnapBridge, which provide GPS location to Z cameras via the bluetooth smart mode (the mode you connect with SnapBridge).
@@ -23,7 +21,12 @@ Full documentation is in [android/README.md](android/README.md) (中文版见 [a
 - 中文版：[**使用教程**](android/README.zh-CN.md#%E4%BD%BF%E7%94%A8%E6%95%99%E7%A8%8B)
 - English: [**Usage Tutorial**](android/README.md#usage)
 
-This Android section is contributed by [HowenXu](https://github.com/HowenXu).
+This Android section is maintained by [HowenXu](https://github.com/HowenXu).
+
+> **中文版**：安卓端实现已完整可用。它基于 [gkoh/furble](https://github.com/gkoh/furble) 的逆向成果，已在尼康 Z7 II 上验证可用（理论上支持所有带 SnapBridge 智能设备模式的 Z 相机）。它可以配对全新相机并连接已保存的相机，通过蓝牙注入真实 GPS（含网络定位），以后台低功耗前台服务方式持续运行，并能自动恢复 SnapBridge 设备标识，让你在本应用与 SnapBridge 之间切换时无需删除任何配对记录。完整文档见 [android/README.md](android/README.md)（中文版见 [android/README.zh-CN.md](android/README.zh-CN.md)）。
+> - 中文版：[**使用教程**](android/README.zh-CN.md#%E4%BD%BF%E7%94%A8%E6%95%99%E7%A8%8B)
+> - English: [**Usage Tutorial**](android/README.md#usage)
+> - 本 Android 部分由 [HowenXu](https://github.com/HowenXu) 维护。
 
 ## Kotlin PoC (Linux only, require Bluez)
 
