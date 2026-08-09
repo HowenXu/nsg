@@ -77,7 +77,10 @@ class SettingsRepository(context: Context) {
         val raw = prefs.getString(KEY_FIXED_DEVICE_ID, null)?.takeIf { it.isNotBlank() } ?: return null
         val hex = raw.removePrefix("0x").removePrefix("0X")
         if (hex.length == 8) {
-            val dev = hex.toLongOrNull(16)?.and(0xFFFFFFFFL) ?: return null
+            // Same byte-order semantics as the 16-hex form below: the hex string spells
+            // out the wire bytes in the order the camera advertises them (e.g. 445D4B24),
+            // so reverse the bytes to get the little-endian uint32 stored on the wire.
+            val dev = reverseHex(hex).toLongOrNull(16)?.and(0xFFFFFFFFL) ?: return null
             return FixedIdentity(dev, null)
         }
         if (hex.length == 16) {

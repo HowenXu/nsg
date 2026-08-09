@@ -13,6 +13,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.text.style.TextAlign
@@ -76,8 +80,12 @@ fun SavedCameraDialog(
     defaultCameraName: String?,
     onDismiss: () -> Unit
 ) {
+    var pendingDelete by remember { mutableStateOf<PairedCamera?>(null) }
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = {
+            pendingDelete = null
+            onDismiss()
+        },
         title = { Text(L10n.t("选择已保存的相机", "Select a saved camera")) },
         text = {
             if (cameras.isEmpty()) {
@@ -136,7 +144,7 @@ fun SavedCameraDialog(
                                             Text(if (isDefault) L10n.t("取消默认", "Unset Default") else L10n.t("设为默认", "Set Default"))
                                         }
                                     }
-                                    TextButton(onClick = { onDelete(camera) }) {
+                                    TextButton(onClick = { pendingDelete = camera }) {
                                         Text(L10n.t("删除", "Delete"))
                                     }
                                 }
@@ -147,9 +155,39 @@ fun SavedCameraDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(onClick = {
+                pendingDelete = null
+                onDismiss()
+            }) {
                 Text(L10n.t("取消", "Cancel"))
             }
         }
     )
+    pendingDelete?.let { camera ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text(L10n.t("删除相机", "Delete camera")) },
+            text = {
+                Text(
+                    L10n.t(
+                        "确定要删除 ${camera.name} 吗？删除后需要重新配对才能连接。",
+                        "Delete ${camera.name}? You will need to pair again to reconnect."
+                    )
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingDelete = null
+                    onDelete(camera)
+                }) {
+                    Text(L10n.t("删除", "Delete"))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDelete = null }) {
+                    Text(L10n.t("取消", "Cancel"))
+                }
+            }
+        )
+    }
 }

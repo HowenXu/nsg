@@ -101,7 +101,6 @@ class CameraConnectionService : Service(), CameraBleManager.BleListener {
     private var lastAdvertisedDevice: Long? = null
     private var stage1RetryCount = 0
     private var reconnectRetryCount = 0
-    private var reconnectScanRound = 0
     private var autoExtractActive = false
     private var autoExtractCamera: PairedCamera? = null
     private val autoExtractQueue = ArrayDeque<SnapBridgeIdSolver.Candidate>()
@@ -340,7 +339,6 @@ class CameraConnectionService : Service(), CameraBleManager.BleListener {
             pairingMode = PairingMode.NEW
             savedCamera = null
             reconnectRetryCount = 0
-            reconnectScanRound = 0
             ensureSpoofName()
             val advertised = camera.manufacturerData?.let { extractAdvertisedDeviceId(it) }
             val fixedDevice = settingsRepository.fixedDeviceId()
@@ -393,7 +391,6 @@ class CameraConnectionService : Service(), CameraBleManager.BleListener {
             savedCamera = camera
             adoptedDeviceId = null
             reconnectRetryCount = 0
-            reconnectScanRound = 0
             ensureSpoofName()
             controllerName = camera.controllerName.ifBlank {
                 settingsRepository.spoofControllerName() ?: DEFAULT_CONTROLLER_NAME
@@ -633,7 +630,6 @@ class CameraConnectionService : Service(), CameraBleManager.BleListener {
             connectCurrentDevice()
             return
         }
-        reconnectScanRound = round
         markActivity()
         updateState(ConnectionState.Connecting)
         logEvent(if (round == 0) L10n.t("正在扫描已保存的相机...", "Scanning for the saved camera...") else L10n.t("未发现相机广播，继续扫描...", "Camera not found yet, continuing to scan..."))
@@ -644,6 +640,10 @@ class CameraConnectionService : Service(), CameraBleManager.BleListener {
         val callback = object : ScanCallback() {
             override fun onScanResult(callbackType: Int, result: ScanResult?) {
                 result ?: return
+                // Any advertisement proves the scan is making progress, so keep the
+                // startup watchdog (autoReconnectLastCamera) from killing a slow scan
+                // round mid-way: it only fires after 10s with no BLE activity at all.
+                markActivity()
                 val name = result.device.name
                 val advertised = extractAdvertisedDeviceId(result.scanRecord)
                 val nameMatch = name != null && name == camera.name
@@ -684,7 +684,6 @@ class CameraConnectionService : Service(), CameraBleManager.BleListener {
                         savedCamera = adopted
                     }
                 }
-                reconnectScanRound = 0
                 reconnectRetryCount = 0
                 Log.d(TAG, "Reconnect scan found current BLE address: ${result.device.address} (saved was ${camera.address})")
                 reconnectScanTimeoutJob?.cancel()
@@ -1052,7 +1051,7 @@ class CameraConnectionService : Service(), CameraBleManager.BleListener {
                         // camera advertises the ID it expects, and we adopt it automatically.
                         reconnectRetryCount++
                         logEvent(
-                            L10n.t("连接被相机拒绝(status=133)，自动重新扫描以采用相机期望的设备ID（第 ${reconnectRetryCount}/2 次）", "Connection rejected by camera (status=133); rescanning to adopt the expected device ID (attempt ${reconnectRetryCount}/2)")
+                            L10n.t("连接被相机拒绝，自动重新扫描以采用相机期望的设备ID（第 ${reconnectRetryCount}/2 次）", "Connection rejected by camera; rescanning to adopt the expected device ID (attempt ${reconnectRetryCount}/2)")
                         )
                         startReconnectScan(savedCamera!!, round = 0)
                     } else {
@@ -1235,12 +1234,6 @@ class CameraConnectionService : Service(), CameraBleManager.BleListener {
         if (status != android.bluetooth.BluetoothGatt.GATT_SUCCESS) {
             Log.e(TAG, "Write failed on $uuid: status=$status")
             logEvent(L10n.t("写入失败: status=$status", "Write failed: status=$status"))
-            if (uuid == CameraBleManager.ID_UUID && pairingStep == 0) {
-                Log.w(TAG, "Device name write failed (status=$status); continuing with stage 1 anyway")
-                logEvent(L10n.t("设备名写入失败(status=$status)，继续尝试配对握手", "Device name write failed (status=$status); continuing the handshake"))
-                sendStage1()
-                return
-            }
             if (uuid == CameraBleManager.PAIR_UUID && pairingStep == 1) {
                 if (autoExtractActive) {
                     Log.d(TAG, "Auto-extract: candidate rejected (status=$status), trying next")
@@ -1254,7 +1247,7 @@ class CameraConnectionService : Service(), CameraBleManager.BleListener {
                 if (stage1RetryCount < 1 && reconnectRetryCount < 2) {
                     stage1RetryCount++
                     reconnectRetryCount++
-                    logEvent(L10n.t("配对写入被相机拒绝(133)（第 ${reconnectRetryCount}/2 次），1 秒后自动重试...", "Pairing write rejected (133) (attempt ${reconnectRetryCount}/2); retrying in 1s..."))
+                    logEvent(L10n.t("配对写入被相机拒绝(status=$status)（第 ${reconnectRetryCount}/2 次），1 秒后自动重试...", "Pairing write rejected (status=$status) (attempt ${reconnectRetryCount}/2); retrying in 1s..."))
                     serviceScope.launch {
                         delay(1_000)
                         if (pairingStep != 1) return@launch
@@ -1276,7 +1269,7 @@ class CameraConnectionService : Service(), CameraBleManager.BleListener {
                 }
                 val fixed = settingsRepository.fixedIdentity()
                 logEvent(
-                    L10n.t("相机拒绝了配对写入(status=133)。当前蓝牙配对状态: $bondText。", "Camera rejected the pairing write (status=133). Current bond state: $bondText.") +
+                    L10n.t("相机拒绝了配对写入(status=$status)。当前蓝牙配对状态: $bondText。", "Camera rejected the pairing write (status=$status). Current bond state: $bondText.") +
                         (if (fixed?.nonce != null) {
                             L10n.t("已使用固定标识(device=0x%08X,nonce=0x%08X)仍被拒绝：请确认该标识与相机端配对记录一致", "Rejected even with the fixed identity (device=0x%08X,nonce=0x%08X): make sure it matches the camera's pairing record").format(fixed.device, fixed.nonce)
                         } else {
@@ -1290,17 +1283,10 @@ class CameraConnectionService : Service(), CameraBleManager.BleListener {
         when (uuid) {
             CameraBleManager.ID_UUID -> {
                 idWriteTimeoutJob?.cancel()
-                when (pairingStep) {
-                    0 -> {
-                        Log.d(TAG, "Reconnect device name written; starting stage 1")
-                        logEvent(L10n.t("设备名写入成功，开始配对握手", "Device name written; starting the handshake"))
-                        sendStage1()
-                    }
-                    4 -> {
-                        Log.d(TAG, "ID write confirmed, checking bond state")
-                        pairingStep = 5
-                        checkBondedAndFinish()
-                    }
+                if (pairingStep == 4) {
+                    Log.d(TAG, "ID write confirmed, checking bond state")
+                    pairingStep = 5
+                    checkBondedAndFinish()
                 }
             }
             CameraBleManager.GEO_UUID -> {
@@ -1432,7 +1418,11 @@ class CameraConnectionService : Service(), CameraBleManager.BleListener {
         if (foundName.isNullOrBlank() || targetName.isNullOrBlank()) return false
         val a = foundName.trim().lowercase(Locale.ROOT)
         val b = targetName.trim().lowercase(Locale.ROOT)
-        return a == b || a.contains(b) || b.contains(a)
+        // Case-insensitive exact match, or one name being a prefix of the other (some
+        // ROMs truncate device names over classic discovery). A bare contains() check
+        // could match an unrelated device whose name merely embeds the target string.
+        val (shorter, longer) = if (a.length <= b.length) a to b else b to a
+        return a == b || (shorter.length >= 4 && longer.startsWith(shorter))
     }
     @SuppressLint("MissingPermission")
     private fun startClassicDiscovery() {

@@ -23,9 +23,10 @@ data class PairingMessage(
         buffer.put(stage.toByte())
         buffer.putLong(timestamp)
         // SnapBridge stores the 8-byte DeviceID as a raw byte array in the wire
-        // format (camera advertises its first 4 bytes, e.g. 44 5d 4b 24). Our
-        // uint32 fields are little-endian, so reverse each 4-byte field to keep
-        // the original byte order on the wire.
+        // format (camera advertises its first 4 bytes, e.g. 44 5d 4b 24). The
+        // uint32 fields below must be the little-endian interpretation of those
+        // wire bytes; callers (e.g. SettingsRepository.fixedIdentity) reverse the
+        // hex string into that value before building the message.
         buffer.putInt((device and 0xFFFFFFFFL).toInt())
         buffer.putInt((nonce and 0xFFFFFFFFL).toInt())
         return buffer.array()
