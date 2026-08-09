@@ -1,49 +1,121 @@
-# nsg - Nikon Smart GPS
+# nsg - 尼康智能 GPS（安卓完整实现）
 
-An alternative for Nikon's SnapBridge, which provide GPS location to Z cameras via the bluetooth smart mode (the mode you connect with SnapBridge).
+一个 Nikon SnapBridge 的替代方案：通过蓝牙 smart-device 模式，把手机的 GPS 位置持续注入尼康 Z 系列相机，让照片自动带上地理坐标。
 
-## Why?
+本项目在 [hurui200320/nsg](https://github.com/hurui200320/nsg) 的基础上，**完成了安卓端的完整实现**（原作者只提供了安卓 PoC 与 ESP32 方案）。配对协议逆向成果来自 [gkoh/furble](https://github.com/gkoh/furble)。
 
-I own Z 50 II and Z 8 camera, and I'm living in China. China has a law to forbiden all cameras from having built-in GPS for some reason. A workaround is using SnapBridge to provide GPS locations. However, on my Samsung, it's not stable (often disconnected from camera), and consume a lot of battery.
+> 背景：国内销售的相机被强制禁用了内置 GPS，SnapBridge 又存在不稳定、耗电高等问题。这个项目让一台闲置的安卓手机变成相机的专用 GPS 设备。
 
-With my new Z8, I'm thinking maybe I can made my own GPS using the 10 pin connector since it's talking NEMA-0183 at 4800 bps. But sadly the Chinese firmware blocks the GPS setting, so even you have Z9, which has built-in GPS, you can't use it.
+---
 
-So for me, and other Chinese users, SnapBridge is the only way to feed GPS into the camera and geotagging the photo.
+## 功能详解
 
-## Android PoC
+### 1. SnapBridge 设备标识自动破解（核心特性）
 
-This project steals the reverse engineer result from [gkoh/furble](https://github.com/gkoh/furble). Initially I thought I have to go through the SnapBridge APK and capture the bluetooth package, but thankfully the community has already done that.
+相机一旦和 SnapBridge 配对过，就只接受 SnapBridge 的「设备标识」。以前想换别的软件，必须在相机和手机上同时删除配对记录，非常麻烦。
 
-The Android PoC has been verified to work with both the Nikon Z50 II and Nikon Z8 over Bluetooth smart-device mode.
+本项目通过逆向 SnapBridge APK，发现其设备标识是这样生成的：
 
-To first proof things works, I build an Android APP for testing. Once finished and verified things works, I'll buy a M5StackS3 and built a dedicated hardware for it, because again, my samsung phone doesn't have a big battery.
+```
+new Random(new Date().getTime()).nextBytes(8)
+```
 
-## Kotlin PoC (Linux only, require Bluez)
+即：**以首次运行时的毫秒时间戳为种子，生成 8 字节随机数**，且只生成一次。相机广播中暴露了该标识的前 4 字节。
 
-Apparently Android's BLE and BT stack is not easy to use. Using it as a PoC defeat the purpose of clean code just focusing on the core features. So, as a backend developer, I decide to use whatever I'm comfortable: the good old JVM.
+于是 App 可以：
+1. 读取相机广播的 4 字节前缀；
+2. 读取 SnapBridge 的首次安装时间；
+3. 通过 LCG（线性同余）数学反解出全部可能的种子时间戳；
+4. 逐个连接相机验证，直到相机接受；
+5. 自动保存为「固定设备标识」，此后**与 SnapBridge 无缝切换，无需删除任何配对记录**。
 
-Currently the kotlin PoC can pair new devices (test with Z50II and Z8) and connecting to saved devices. Also can send fake GPS payload to the camera.
+你在「配对新相机」时如果发现相机已有配对记录，App 会自动开始破解（见日志区实时输出）。
 
-TODO: make it more robus? Like auto-reconnect when camera wakes up from idle. Also maybe connecting to multiple BLE devices?
+### 2. 控制器名称自动伪装
 
-## ESP32 (The final product)
+App 会自动生成与 SnapBridge 相同格式的控制器名称（`Android_机型_四位随机数`），相机端显示的名字风格与 SnapBridge 一致。
 
-The dedicated hardware runs on the ESP32. The original M5StackS3/CoreS3 idea was ruled out because the ESP32-S3 only supports BLE and does not have Bluetooth Classic, which the Nikon smart-device protocol requires for bonding. The original ESP32 has both BLE and Bluetooth Classic, which is why it is the target platform.
+### 3. 真实 GPS 注入
 
-Moved from PlatformIO to [pioarduino](https://github.com/pioarduino/platform-espressif32) because platformio sucks. They stay at old version of arduino-esp32. The pioarduino fixed this.
+- 连接相机后自动开启定位（GPS + 网络定位），实时把经纬度/精度打包成尼康 GEO 载荷写入相机；
+- 低功耗策略：静止且近期已发送时跳过；30 秒兜底保活；
+- 断开连接后自动关闭定位，省电。
 
-The code is pretty much finished, it can pair new cameras, talk to a UBlox GNSS module, parse NMEA and send TIME and GEO payload over BLE. It supports multiple boards (e.g. M5Stack Core2 and ESP32 WROOM 32E); see `esp32/README.md` for details.
+### 4. 后台运行与低耗电
 
-## Known Camera Quirks
+- 前台服务 + `START_STICKY`，任务移除后自动重启；
+- 启动时自动检查电池优化豁免并主动申请（保证后台存活）；
+- 连接成功后可保持后台运行，低频率发送 GPS。
 
-### LCD coordinate display
+### 5. 已保存相机管理
 
-The Nikon camera LCD shows GPS coordinates in **degrees + decimal minutes**, the same format this project's M5Stack screen uses. However, the camera's rendering of the fractional minutes is buggy in some cases.
+- 支持保存多台相机；列表支持「连接」「自动提取标识」「设为默认」「删除」；
+- 多台相机时可设置「启动时默认连接」的那一台；
+- 启动自动连接带 10 秒超时，连不上自动停止。
 
-For example, a fractional minute of `51.002'` is shown on the camera LCD as `51.2'`, not `51.002'`. By contrast, `51.688'` is shown correctly as `51.688'`. The failure is not consistent — it appears to depend on the digits of the fractional part.
+### 6. 界面与本地化
 
-The value stored in the photo's EXIF tag is correct in both cases (verified with `exiftool`), so the geotagging is accurate. This is a display-only bug in the Nikon camera firmware, not a bug in this project's encoding. This is confirmed on both Z50II and Z8.
+- 主界面分状态区 / 日志区 / 操作区，日志可滚动查看；
+- 右上角三点菜单进入「高级设置」页（相机端设备名、固定设备标识），支持系统返回键；
+- 连接过程中按钮显示加载动画；
+- 自动跟随系统语言：中文系统显示中文，其他语言显示英文。
 
-## Contributing
+### 7. 兼容性
 
-Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for how to build the project, report bugs, and submit changes. Contributors are listed in [CONTRIBUTORS.md](CONTRIBUTORS.md).
+- 最低支持 **Android 7（API 24）**，可放心使用闲置老手机；
+- 已实测：华为 Mate 40 Pro（鸿蒙 4.2）、华为 MRR-W29；
+- 相机兼容：Nikon Z50 II、Z8（smart-device 模式），理论上支持所有 SnapBridge 智能设备模式的 Z 相机。
+
+---
+
+## 使用教程
+
+### 1. 安装
+
+从 [Releases](https://github.com/HowenXu/nsg/releases) 下载 `Nikon_Smart_GPS.apk` 安装。首次打开请允许：
+
+- 位置权限（获取 GPS）；
+- 蓝牙权限（连接相机）；
+- 通知权限（前台服务通知）；
+- 电池优化豁免（系统弹窗里点「允许」）。
+
+### 2. 相机已用 SnapBridge 配对过（最常见情况）
+
+1. 打开 App，点「配对新相机」；
+2. 列表中选中你的相机；
+3. 如果相机已有配对记录，App 会自动破解 SnapBridge 设备标识（日志区会实时显示进度）；
+4. 破解成功后自动连接，状态变为「就绪」；
+5. 以后可以直接用「连接已保存相机」快速连接，与 SnapBridge 互切**无需删除配对记录**。
+
+### 3. 全新相机（从未配对）
+
+直接「配对新相机」→ 选中相机 → 按提示在系统弹窗完成蓝牙配对即可。
+
+### 4. 拍照带 GPS
+
+连接成功后（状态「就绪」），相机 LCD 会显示 GPS 图标/坐标，此时拍摄的照片 EXIF 会包含位置信息。
+
+### 5. 后台使用
+
+连接后可以退回桌面，App 会以前台服务方式保持连接并持续注入 GPS。建议在系统设置里把本 App 加入电池白名单/自启动白名单（国产 ROM 尤其重要）。
+
+### 6. 高级设置
+
+右上角 `⋮` → 「高级设置（一般无需更改）」：
+
+- **相机端设备名**：相机显示的控制器名称（默认自动生成，一般无需改）；
+- **固定设备标识**：SnapBridge 的完整 16 位设备标识。自动破解成功后会自动填入，一般无需手动改。
+
+---
+
+## 已知问题
+
+- **不要清除 SnapBridge 的数据或重装它**：否则它会重新生成设备标识，需要重新「自动提取」一次；
+- 尼康相机 LCD 上的坐标显示存在固件级小数显示 bug（如 `51.002'` 显示成 `51.2'`），但写入照片 EXIF 的坐标是正确的（详见原项目说明）。
+
+---
+
+## 致谢
+
+- [hurui200320/nsg](https://github.com/hurui200320/nsg) —— 原始项目（ESP32 硬件方案 + 安卓 PoC）
+- [gkoh/furble](https://github.com/gkoh/furble) —— 尼康 smart-device 配对协议的逆向成果
