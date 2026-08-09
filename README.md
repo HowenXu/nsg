@@ -1,107 +1,49 @@
-> 中文版 README：[README.zh-CN.md](README.zh-CN.md)
+# nsg - Nikon Smart GPS
 
-# nsg - Nikon Smart GPS (Complete Android Implementation)
+An alternative for Nikon's SnapBridge, which provide GPS location to Z cameras via the bluetooth smart mode (the mode you connect with SnapBridge).
 
-A SnapBridge alternative that feeds GPS coordinates from your phone into Nikon Z-series cameras over Bluetooth smart-device mode, so your photos are automatically geotagged.
+## Why?
 
-This project is based on [hurui200320/nsg](https://github.com/hurui200320/nsg) and **completes the Android implementation** (the original author only shipped an Android PoC plus an ESP32 solution). The pairing-protocol reverse engineering comes from [gkoh/furble](https://github.com/gkoh/furble).
+I own Z 50 II and Z 8 camera, and I'm living in China. China has a law to forbiden all cameras from having built-in GPS for some reason. A workaround is using SnapBridge to provide GPS locations. However, on my Samsung, it's not stable (often disconnected from camera), and consume a lot of battery.
 
-> Background: cameras sold in some regions ship with GPS disabled by firmware, and SnapBridge is unstable and battery-hungry. This project turns a spare Android phone into a dedicated GPS device for your camera.
+With my new Z8, I'm thinking maybe I can made my own GPS using the 10 pin connector since it's talking NEMA-0183 at 4800 bps. But sadly the Chinese firmware blocks the GPS setting, so even you have Z9, which has built-in GPS, you can't use it.
 
----
+So for me, and other Chinese users, SnapBridge is the only way to feed GPS into the camera and geotagging the photo.
 
-## Features
+## Android
 
-### 1. Automatic SnapBridge DeviceID extraction (core feature)
+The Android implementation is complete and ready to use. It is based on the reverse engineering from [gkoh/furble](https://github.com/gkoh/furble), and has been verified to work with the Nikon Z7 II (and should support any Z camera with SnapBridge smart-device mode).
 
-Once a camera has been paired with SnapBridge, it only accepts SnapBridge's device identity. This app recovers that identity mathematically, so you can **switch freely between this app and SnapBridge without deleting any pairing records**.
+It can pair with new cameras and connect to saved ones over Bluetooth, inject real GPS (plus network location) into the camera, run as a low-power foreground service in the background, and automatically recover the SnapBridge device ID so you can switch between this app and SnapBridge without deleting any pairing records.
 
-The extraction algorithm lives in its own project, [snapbridge-id-extractor](https://github.com/HowenXu/snapbridge-id-extractor) (full explanation and source included). When you tap "Pair New Camera" and the camera already has a pairing record, the app runs that algorithm automatically and connects (progress is shown in the log panel).
+Full documentation is in [android/README.md](android/README.md) (中文版见 [android/README.zh-CN.md](android/README.zh-CN.md)).
 
-### 2. Automatic controller-name spoofing
+## Kotlin PoC (Linux only, require Bluez)
 
-The app auto-generates a controller name in SnapBridge's exact format (`Android_<model>_<random>`), so the name shown on the camera matches the SnapBridge style.
+Apparently Android's BLE and BT stack is not easy to use. Using it as a PoC defeat the purpose of clean code just focusing on the core features. So, as a backend developer, I decide to use whatever I'm comfortable: the good old JVM.
 
-### 3. Real GPS injection
+Currently the kotlin PoC can pair new devices (test with Z50II and Z8) and connecting to saved devices. Also can send fake GPS payload to the camera.
 
-- Location (GPS + network) starts automatically after connecting and is packed into Nikon GEO payloads written to the camera;
-- Battery-aware: skips sending when stationary and recently sent; 30-second keep-alive fallback;
-- Location stops automatically when disconnected.
+TODO: make it more robus? Like auto-reconnect when camera wakes up from idle. Also maybe connecting to multiple BLE devices?
 
-### 4. Background operation and low power
+## ESP32 (The final product)
 
-- Foreground service + `START_STICKY`, auto-restart after task removal;
-- Requests battery-optimization exemption at startup;
-- Stays connected in the background and keeps GPS flowing at a low rate.
+The dedicated hardware runs on the ESP32. The original M5StackS3/CoreS3 idea was ruled out because the ESP32-S3 only supports BLE and does not have Bluetooth Classic, which the Nikon smart-device protocol requires for bonding. The original ESP32 has both BLE and Bluetooth Classic, which is why it is the target platform.
 
-### 5. Saved-camera management
+Moved from PlatformIO to [pioarduino](https://github.com/pioarduino/platform-espressif32) because platformio sucks. They stay at old version of arduino-esp32. The pioarduino fixed this.
 
-- Multiple cameras supported; per-camera actions: Connect, Auto-Extract ID, Set Default, Delete;
-- With multiple cameras, pick the "default at startup" one;
-- Startup auto-connect has a 10-second timeout.
+The code is pretty much finished, it can pair new cameras, talk to a UBlox GNSS module, parse NMEA and send TIME and GEO payload over BLE. It supports multiple boards (e.g. M5Stack Core2 and ESP32 WROOM 32E); see `esp32/README.md` for details.
 
-### 6. UI and localization
+## Known Camera Quirks
 
-- Status / log / actions layout, scrollable logs;
-- Three-dot menu opens "Advanced Settings" (device name, fixed ID);
-- Loading spinner on buttons while connecting;
-- Language follows the system: Chinese for Chinese locales, English otherwise.
+### LCD coordinate display
 
-### 7. Compatibility
+The Nikon camera LCD shows GPS coordinates in **degrees + decimal minutes**, the same format this project's M5Stack screen uses. However, the camera's rendering of the fractional minutes is buggy in some cases.
 
-- Minimum **Android 7 (API 24)** — an old spare phone works great;
-- Verified devices: **Huawei Mate 40 Pro** and **Huawei MatePad Pro 10.8**;
-- Camera tested: **Nikon Z7 II only**; in theory any Z camera supporting SnapBridge smart-device mode.
-- Currently only Bluetooth-mode support is implemented: Z-mount mirrorless cameras and some last-generation DSLRs with Bluetooth. WiFi connectivity is still in progress.
-- If you run into connection problems or any other bugs, or have improvement
-  suggestions, please open an [issue](https://github.com/HowenXu/nsg/issues).
-  I check them periodically.
+For example, a fractional minute of `51.002'` is shown on the camera LCD as `51.2'`, not `51.002'`. By contrast, `51.688'` is shown correctly as `51.688'`. The failure is not consistent — it appears to depend on the digits of the fractional part.
 
----
+The value stored in the photo's EXIF tag is correct in both cases (verified with `exiftool`), so the geotagging is accurate. This is a display-only bug in the Nikon camera firmware, not a bug in this project's encoding. This is confirmed on both Z50II and Z8.
 
-## Usage
+## Contributing
 
-### 1. Install
-
-Download `Nikon_Smart_GPS.apk` from [Releases](https://github.com/HowenXu/nsg/releases). On first launch, allow:
-
-- Location permission (for GPS);
-- Bluetooth permission (to connect);
-- Notification permission (foreground service);
-- Battery-optimization exemption (tap "Allow" in the system dialog).
-
-### 2. Camera already paired with SnapBridge (most common)
-
-1. Open the app and tap "Pair New Camera";
-2. Select your camera from the list;
-3. If the camera has a pairing record, the app auto-extracts the SnapBridge DeviceID (progress is shown in the log panel);
-4. On success it connects and the status becomes "Ready";
-5. Afterwards use "Connect Saved" for quick connects — switching with SnapBridge needs **no pairing deletion**.
-
-### 3. Brand-new camera
-
-Tap "Pair New Camera", select it, and confirm the system Bluetooth pairing dialog.
-
-### 4. Geotagging
-
-Once connected (status "Ready"), the camera LCD shows a GPS indicator/coordinates, and photos you take carry EXIF location data.
-
-### 5. Background use
-
-After connecting you can leave the app; it stays connected via the foreground service and keeps feeding GPS. Add the app to your ROM's battery whitelist/autostart list (important on Chinese ROMs).
-
-### 6. Advanced settings
-
-`⋮` (top-right) → "Advanced settings (no changes needed)":
-
-- **Camera-side device name**: the controller name shown on the camera (auto-generated by default);
-- **Fixed device ID**: SnapBridge's full 16-hex identity. Auto-filled after successful extraction.
-
----
-
-## Known issues
-
-- Currently only Bluetooth-mode support is implemented: Z-mount mirrorless cameras and some last-generation DSLRs with Bluetooth. WiFi connectivity is still in progress.
-- **Do not clear SnapBridge's data or reinstall it**: it would generate a new device identity and you'd need to re-run the auto-extraction;
-- Nikon camera LCD has a firmware-level bug displaying fractional minutes (e.g. `51.002'` shown as `51.2'`), but the EXIF coordinates written to photos are correct (see the original project).
-- The app does not have a custom icon yet (the author is too lazy to make one 😋). If you would like to contribute one, please open an [issue](https://github.com/HowenXu/nsg/issues).
+Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) for how to build the project, report bugs, and submit changes. Contributors are listed in [CONTRIBUTORS.md](CONTRIBUTORS.md).
