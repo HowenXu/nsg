@@ -73,8 +73,8 @@
     <string name="dialog_delete_camera_title">Delete camera</string>
     <string name="dialog_delete_camera_message">Delete %1$s? You will need to pair again to reconnect.</string>
     <plurals name="dialog_saved_count_hint">
-        <item quantity="one">%1$d camera saved. Use "Set Default" to pick the auto-connect camera at startup; "Delete" removes it.</item>
-        <item quantity="other">%1$d cameras saved. Use "Set Default" to pick the auto-connect camera at startup; "Delete" removes it.</item>
+        <item quantity="one">%1$d camera saved. Use \"Set Default\" to pick the auto-connect camera at startup; \"Delete\" removes it.</item>
+        <item quantity="other">%1$d cameras saved. Use \"Set Default\" to pick the auto-connect camera at startup; \"Delete\" removes it.</item>
     </plurals>
 
     <!-- Service logs -->
