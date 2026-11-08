@@ -1,107 +1,95 @@
-> 中文版 README：[README.zh-CN.md](README.zh-CN.md)
+# nsg Android remote
 
-# nsg - Nikon Smart GPS (Complete Android Implementation)
+English | [中文](README.zh-CN.md)
 
-A SnapBridge alternative that feeds GPS coordinates from your phone into Nikon Z-series cameras over Bluetooth smart-device mode, so your photos are automatically geotagged.
+The Android app turns a spare phone into a GPS source for Nikon Z cameras. It connects over Bluetooth smart-device mode and continuously writes location data into the camera, so photos come out geotagged.
 
-This project is based on [hurui200320/nsg](https://github.com/hurui200320/nsg) and **completes the Android implementation** (the original author only shipped an Android PoC plus an ESP32 solution). The pairing-protocol reverse engineering comes from [gkoh/furble](https://github.com/gkoh/furble).
+This is the Android part of [hurui200320/nsg](https://github.com/hurui200320/nsg). The SnapBridge pairing protocol was reverse engineered by [gkoh/furble](https://github.com/gkoh/furble). The device-ID recovery algorithm lives in [snapbridge-id-extractor](https://github.com/HowenXu/snapbridge-id-extractor).
 
-> Background: cameras sold in some regions ship with GPS disabled by firmware, and SnapBridge is unstable and battery-hungry. This project turns a spare Android phone into a dedicated GPS device for your camera.
+## Status
 
----
+The app works and is used regularly. The current version is 1.0.1.
 
-## Features
+It has been tested on a Nikon Z7 II. In theory it should work with any Z camera that supports SnapBridge smart-device mode over Bluetooth. Only Bluetooth mode is implemented, so Z-mount mirrorless cameras and the last generation of DSLRs with Bluetooth are supported.
 
-### 1. Automatic SnapBridge DeviceID extraction (core feature)
+Phones tested so far: Huawei Mate 40 Pro and Huawei MatePad Pro 10.8. The minimum Android version is 7.0 (API 24).
 
-Once a camera has been paired with SnapBridge, it only accepts SnapBridge's device identity. This app recovers that identity mathematically, so you can **switch freely between this app and SnapBridge without deleting any pairing records**.
+## What it does
 
-The extraction algorithm lives in its own project, [snapbridge-id-extractor](https://github.com/HowenXu/snapbridge-id-extractor) (full explanation and source included). When you tap "Pair New Camera" and the camera already has a pairing record, the app runs that algorithm automatically and connects (progress is shown in the log panel).
+- Pairs a new camera and lists nearby cameras.
+- Connects to saved cameras, including a default camera at startup.
+- Recovers the SnapBridge device identity from an existing pairing, so you can switch between SnapBridge and this app without deleting the pairing record.
+- Injects GPS and network location into the camera.
+- Keeps a foreground service alive in the background and reconnects when the camera comes back.
+- Shows a small log panel so connection and extraction progress are visible.
+- Follows the system language: Chinese on Chinese systems, English otherwise.
 
-### 2. Automatic controller-name spoofing
+## Install
 
-The app auto-generates a controller name in SnapBridge's exact format (`Android_<model>_<random>`), so the name shown on the camera matches the SnapBridge style.
+Download `nsg.apk` from [Releases](https://github.com/HowenXu/nsg/releases) and install it.
 
-### 3. Real GPS injection
+On first launch, grant:
 
-- Location (GPS + network) starts automatically after connecting and is packed into Nikon GEO payloads written to the camera;
-- Battery-aware: skips sending when stationary and recently sent; 30-second keep-alive fallback;
-- Location stops automatically when disconnected.
+- Location permission, used for GPS.
+- Bluetooth permission, used to connect to the camera.
+- Notification permission, needed by the foreground service.
+- Battery-optimisation exemption. On Chinese ROMs, also add the app to the autostart/background whitelist.
 
-### 4. Background operation and low power
+## Pair a camera
 
-- Foreground service + `START_STICKY`, auto-restart after task removal;
-- Requests battery-optimization exemption at startup;
-- Stays connected in the background and keeps GPS flowing at a low rate.
+### Camera already used with SnapBridge
 
-### 5. Saved-camera management
+This is the common case.
 
-- Multiple cameras supported; per-camera actions: Connect, Auto-Extract ID, Set Default, Delete;
-- With multiple cameras, pick the "default at startup" one;
-- Startup auto-connect has a 10-second timeout.
+1. Open the app and tap **Pair new camera**.
+2. Pick the camera from the list.
+3. If the camera already has a SnapBridge pairing record, the app runs the device-ID recovery automatically. The log panel shows the progress.
+4. When it finishes, the app connects and the status becomes **Ready**.
 
-### 6. UI and localization
+After that, use **Connect saved camera** for normal connections. Switching back to SnapBridge does not require deleting anything.
 
-- Status / log / actions layout, scrollable logs;
-- Three-dot menu opens "Advanced Settings" (device name, fixed ID);
-- Loading spinner on buttons while connecting;
-- Language follows the system: Chinese for Chinese locales, English otherwise.
+### New camera
 
-### 7. Compatibility
+Tap **Pair new camera**, select the camera, and confirm the system Bluetooth pairing dialog.
 
-- Minimum **Android 7 (API 24)** — an old spare phone works great;
-- Verified devices: **Huawei Mate 40 Pro** and **Huawei MatePad Pro 10.8**;
-- Camera tested: **Nikon Z7 II only**; in theory any Z camera supporting SnapBridge smart-device mode.
-- Currently only Bluetooth-mode support is implemented: Z-mount mirrorless cameras and some last-generation DSLRs with Bluetooth.
-- If you run into connection problems or any other bugs, or have improvement
-  suggestions, please open an [issue](https://github.com/HowenXu/nsg/issues).
-  I check them periodically.
+## Use
 
----
+Once the status is **Ready**, the camera LCD shows the GPS indicator or coordinates. Photos taken at that point should contain location data in EXIF.
 
-## Usage
+You can leave the app in the background. The foreground service keeps the connection alive and continues sending location updates at a low rate.
 
-### 1. Install
+## Advanced settings
 
-Download `Nikon_Smart_GPS.apk` from [Releases](https://github.com/HowenXu/nsg/releases). On first launch, allow:
+Open the three-dot menu and choose **Advanced settings**. Most people do not need to change anything here.
 
-- Location permission (for GPS);
-- Bluetooth permission (to connect);
-- Notification permission (foreground service);
-- Battery-optimization exemption (tap "Allow" in the system dialog).
-
-### 2. Camera already paired with SnapBridge (most common)
-
-1. Open the app and tap "Pair New Camera";
-2. Select your camera from the list;
-3. If the camera has a pairing record, the app auto-extracts the SnapBridge DeviceID (progress is shown in the log panel);
-4. On success it connects and the status becomes "Ready";
-5. Afterwards use "Connect Saved" for quick connects — switching with SnapBridge needs **no pairing deletion**.
-
-### 3. Brand-new camera
-
-Tap "Pair New Camera", select it, and confirm the system Bluetooth pairing dialog.
-
-### 4. Geotagging
-
-Once connected (status "Ready"), the camera LCD shows a GPS indicator/coordinates, and photos you take carry EXIF location data.
-
-### 5. Background use
-
-After connecting you can leave the app; it stays connected via the foreground service and keeps feeding GPS. Add the app to your ROM's battery whitelist/autostart list (important on Chinese ROMs).
-
-### 6. Advanced settings
-
-`⋮` (top-right) → "Advanced settings (no changes needed)":
-
-- **Camera-side device name**: the controller name shown on the camera (auto-generated by default);
-- **Fixed device ID**: SnapBridge's full 16-hex identity. Auto-filled after successful extraction.
-
----
+- **Camera-side device name**: the controller name shown by the camera. It is generated in the SnapBridge format by default.
+- **Fixed device ID**: the complete 16-hex SnapBridge identity. The app fills it in after a successful extraction.
 
 ## Known issues
 
-- Currently only Bluetooth-mode support is implemented: Z-mount mirrorless cameras and some last-generation DSLRs with Bluetooth.
-- **Do not clear SnapBridge's data or reinstall it**: it would generate a new device identity and you'd need to re-run the auto-extraction;
-- Nikon camera LCD has a firmware-level bug displaying fractional minutes (e.g. `51.002'` shown as `51.2'`), but the EXIF coordinates written to photos are correct (see the original project).
-- The app does not have a custom icon yet (the author is too lazy to make one 😋). If you would like to contribute one, please open an [issue](https://github.com/HowenXu/nsg/issues).
+- Do not clear SnapBridge's data or reinstall it. It will generate a new identity and you will need to run the extraction again.
+- The Nikon camera LCD sometimes renders fractional minutes incorrectly. For example, `51.002'` may appear as `51.2'`. The EXIF value written to the photo is still correct.
+- Only Bluetooth smart-device mode is supported. Cameras that require Wi-Fi only are out of scope.
+- Some Chinese ROMs kill background services aggressively. The battery and autostart settings matter more than the app itself on those phones.
+
+## Build
+
+Local release builds are unsigned by default, so any clean checkout can build without a keystore:
+
+```bash
+cd android
+./gradlew assembleRelease
+```
+
+The output is `app/build/outputs/apk/release/app-release-unsigned.apk`.
+
+The release workflow builds, signs, verifies, and uploads a signed `nsg.apk` when a `v*` tag is pushed. The workflow needs these repository secrets:
+
+| Secret | Meaning |
+| --- | --- |
+| `KEYSTORE_BASE64` | Base64 of the release keystore |
+| `KEYSTORE_PASSWORD` | Keystore password |
+| `KEY_ALIAS` | Key alias |
+| `KEY_PASSWORD` | Key password |
+
+The project is licensed under the terms in the repository root. See [CONTRIBUTORS.md](../CONTRIBUTORS.md) for contributors.
